@@ -1,0 +1,12 @@
+{
+  "_README": "This file is both the deterministic fingerprint library and the few-shot example source for Tier 1 judging. Positives are confirmed injection/padding patterns to strip automatically. Negatives are confirmed safe patterns that suppress alerts. Writing this file requires explicit user confirmation.",
+  "positives": [
+    {
+      "id": "known-banner",
+      "type": "literal",
+      "pattern": "Powered by Proxy X",
+      "note": "Known middlebox banner"
+    }
+  ],
+  "negatives": []
+}

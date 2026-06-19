@@ -1,0 +1,6 @@
+node_modules/
+dist/
+alerts.jsonl
+pending-suggestions.json
+eval/fixtures/private-real-history/
+.DS_Store

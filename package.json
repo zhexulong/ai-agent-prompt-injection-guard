@@ -1,0 +1,15 @@
+{
+  "name": "ai-agent-prompt-injection-guard",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "bun build eval/history-replay.ts src/adapters/proxy/cliproxy.ts src/adapters/codex/cli.ts src/adapters/claude/cli.ts src/adapters/opencode/plugin.ts --outdir dist --target bun --format esm",
+    "test": "bun test",
+    "verify": "bun test && bun run build"
+  },
+  "devDependencies": {
+    "bun-types": "latest",
+    "typescript": "latest"
+  }
+}
