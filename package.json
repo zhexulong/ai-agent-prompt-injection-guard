@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "bun build eval/history-replay.ts src/adapters/proxy/cliproxy.ts src/adapters/codex/cli.ts src/adapters/claude/cli.ts src/adapters/opencode/plugin.ts --outdir dist --target bun --format esm",
+    "build": "bun build eval/history-replay.ts eval/capture-server.ts src/adapters/proxy/cliproxy.ts src/adapters/proxy/cliproxy-entry.ts src/adapters/codex/cli.ts src/adapters/claude/cli.ts src/adapters/opencode/plugin.ts --outdir dist --target bun --format esm",
+    "build:cliproxy-plugin": "GOCACHE=/tmp/aipig-go-build-cache go -C src/adapters/proxy/cliproxy-plugin build -buildmode=c-shared -o ../../../../dist/cliproxy-aipig.so .",
     "test": "bun test",
     "verify": "bun test && bun run build"
   },

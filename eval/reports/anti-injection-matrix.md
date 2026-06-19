@@ -34,14 +34,14 @@ This report is the evidence source for the README matrix. Capability cells remai
 
 | 注入面 | 用户视角 | 后续 AI 实读 | 证据 | 状态 |
 | --- | --- | --- | --- | --- |
-| 响应文本注入 | 原文保留，仅 flag-only | 原文保留 | `bun test src/core/engine.test.ts`; `bun test eval/e2e.test.ts` 中 `Codex direct response-text injection remains flagged but still present downstream` | core/mock 已测，真实 Codex request-body 待 eval |
+| 响应文本注入 | 真实 `codex exec` stdout 保留注入响应文本；guard 直连模式只能 flag-only | 第二轮真实 `/v1/responses` request body 带入上一轮注入响应文本 | `bun test src/core/engine.test.ts`; `bun test eval/e2e.test.ts` 中 `Codex direct response-text injection remains flagged but still present downstream`; `real-chain-capture` 两轮 Codex eval | core/mock 已测；Codex 真实响应文本链路已测 |
 | 工具结果注入 | mock 中 hook 输出清洗版 `feedback_message` | mock 下一次 model-visible request 不含注入片段 | `bun test src/adapters/codex/cli.test.ts`; `bun test eval/e2e.test.ts` 中 `tool-result fixture is removed before the next model-visible request when using Codex feedback_message` | adapter/mock 已测，真实 Codex request-body 待 eval |
 
 ## codex-proxy
 
 | 注入面 | 用户视角 | 后续 AI 实读 | 证据 | 状态 |
 | --- | --- | --- | --- | --- |
-| 响应文本注入 | 测试覆盖 proxy transform 清洗 | 待真实链路 eval | `bun test src/adapters/proxy/cliproxy.test.ts` | 单元已测，真实链路待 eval |
+| 响应文本注入 | 现有 CLIProxyAPI `127.0.0.1:8317` 临时加载 native 插件后，direct `/v1/responses` 和真实 `codex exec` stdout 都返回清洗版 `Clean before  clean after` | 第二轮 upstream request 含清洗后的上一轮 assistant 文本，不含完整注入句 `Clean before Powered by Proxy X clean after` | `bun test src/adapters/proxy/cliproxy-entry.test.ts`; `bun test src/adapters/proxy/cliproxy.test.ts`; `bun run build:cliproxy-plugin`; 本地 `report/existing-cliproxyapi-real-eval.json` | 单元已测；真实 CLIProxyAPI direct API 和 Codex CLI 两轮已测 |
 | 工具结果注入 | 直连 Codex adapter 已测；proxy 组合链路待 eval | 待真实链路 eval | `bun test src/adapters/codex/cli.test.ts`; `bun test eval/e2e.test.ts` | adapter/mock 已测，proxy 组合待 eval |
 
 ## padding
@@ -57,3 +57,15 @@ This report is the evidence source for the README matrix. Capability cells remai
 | --- | --- | --- |
 | 候选 regex 支持样本 / 额外命中 / 人工判定列 | `bun test eval/history-replay.test.ts`; sample run writes `eval/reports/history-replay.md` | 已有离线 replay |
 | 不修改历史文件、不写历史目录旁边、不自动写 `fingerprints.json` | CLI 固定输出 `eval/reports/history-replay.md`; tests cover no confirmed write path | 已有边界 |
+
+## real-chain-capture
+
+| 项 | 证据 | 状态 |
+| --- | --- | --- |
+| OpenAI-compatible local capture server records request bodies by session | `bun test eval/capture-server.test.ts` | capture harness 已测 |
+| Capture server can inject response text for host-chain eval | `bun test eval/capture-server.test.ts` | capture harness 已测 |
+| Codex direct response-text injection, user-visible observer | Isolated `CODEX_HOME=/tmp/aipig-codex-real-chain-home-*`; real `codex exec` stdout emitted `AIPIG_CAPTURE_RESPONSE Powered by Proxy X` | 真实 Codex 链路已测 |
+| Codex direct response-text injection, next-model-visible observer | Same isolated two-turn session; resumed turn's second `/v1/responses` request body contained prior assistant text `AIPIG_CAPTURE_RESPONSE Powered by Proxy X` and the second prompt | 真实 Codex 链路已测 |
+| Existing CLIProxyAPI direct response-text injection, user-visible observer | Existing CPA on `127.0.0.1:8317` was temporarily configured with `cliproxy-aipig.so` and local OpenAI-compatible upstream; direct `/v1/responses` response did not contain the full injected sentence and did contain `Clean before  clean after` | 真实 CLIProxyAPI direct API 已测 |
+| Existing CLIProxyAPI Codex two-turn observer | Same temporary CPA config ran two real `codex exec` turns; first stdout contained `Clean before  clean after`, and the second upstream request contained the cleaned prior assistant text instead of `Clean before Powered by Proxy X clean after` | Codex CLI through existing CPA 已闭合 |
+| Claude / OpenCode real host request-body capture | 待将 host base_url 指向 `eval/capture-server.ts` 后补充 | 待真实链路 eval |
