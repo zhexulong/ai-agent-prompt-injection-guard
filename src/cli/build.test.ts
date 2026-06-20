@@ -2,27 +2,31 @@ import { expect, test } from "bun:test";
 import { buildCliProxyPluginArtifacts } from "./build";
 
 test("buildCliProxyPluginArtifacts builds the packaged proxy entry before the native bridge", () => {
-  const calls: string[][] = [];
+  const calls: Array<{ args: string[]; cwd?: string }> = [];
   const status = buildCliProxyPluginArtifacts({
-    runBun(args) {
-      calls.push(args);
+    packageRoot: "/pkg/aipig",
+    runBun(args, options) {
+      calls.push({ args, cwd: options.cwd });
       return 0;
     },
   });
 
   expect(status).toBe(0);
   expect(calls).toEqual([
-    [
-      "build",
-      "src/adapters/proxy/cliproxy-entry.ts",
-      "--outdir",
-      "dist",
-      "--target",
-      "bun",
-      "--format",
-      "esm",
-    ],
-    ["run", "scripts/build-cliproxy-plugin.ts"],
+    {
+      args: [
+        "build",
+        "src/adapters/proxy/cliproxy-entry.ts",
+        "--outdir",
+        "dist/src/adapters/proxy",
+        "--target",
+        "bun",
+        "--format",
+        "esm",
+      ],
+      cwd: "/pkg/aipig",
+    },
+    { args: ["run", "scripts/build-cliproxy-plugin.ts"], cwd: "/pkg/aipig" },
   ]);
 });
 

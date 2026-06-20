@@ -1,20 +1,10 @@
-import { mkdirSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { dirname, resolve } from "node:path";
-import { spawnSync } from "node:child_process";
-import { cliproxyPluginArtifactName } from "../src/adapters/proxy/cliproxy-config";
+import { resolve } from "node:path";
+import { buildCliProxyNativePlugin } from "../src/adapters/proxy/cliproxy-native-build";
 
 const repoRoot = resolve(import.meta.dir, "..");
-const pluginDir = resolve(repoRoot, "src/adapters/proxy/cliproxy-plugin");
-const out = resolve(repoRoot, "dist", cliproxyPluginArtifactName(process.platform, "cliproxy-aipig"));
-mkdirSync(dirname(out), { recursive: true });
-
-const result = spawnSync("go", ["-C", pluginDir, "build", "-buildmode=c-shared", "-o", out, "."], {
-  stdio: "inherit",
-  env: {
-    ...process.env,
-    GOCACHE: process.env.GOCACHE ?? resolve(tmpdir(), "aipig-go-build-cache"),
-  },
+const status = buildCliProxyNativePlugin({
+  repoRoot,
+  platform: process.platform,
 });
 
-process.exit(result.status ?? 1);
+process.exit(status);

@@ -10,6 +10,7 @@ const requiredPackageFiles = [
   "src/cli/aipig.ts",
   "src/cli/build.ts",
   "src/adapters/proxy/cliproxy-entry.ts",
+  "src/adapters/proxy/cliproxy-native-build.ts",
   "src/adapters/proxy/cliproxy-plugin/go.mod",
   "src/adapters/proxy/cliproxy-plugin/main.go",
 ];
