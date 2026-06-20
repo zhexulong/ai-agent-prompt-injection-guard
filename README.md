@@ -167,6 +167,8 @@ Run checks:
 ./node_modules/.bin/tsc --noEmit
 bun run verify
 bun run build:cliproxy-plugin
+npm run pack:audit
 ```
 
 `verify` runs unit/integration tests and the Bun build. It does not run the real-chain eval or native plugin build.
+`pack:audit` runs `npm pack --dry-run --json` and fails if the package would include tests, eval data, reports, private history, or local build artifacts. It does not publish.

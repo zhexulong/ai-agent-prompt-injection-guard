@@ -1,0 +1,11 @@
+**/*.test.ts
+eval/
+docs/
+report/
+dist/
+node_modules/
+alerts.jsonl
+pending-suggestions.json
+eval/fixtures/private-real-history/
+.codex-safeguard/
+.DS_Store

@@ -1,8 +1,43 @@
 {
   "name": "ai-agent-prompt-injection-guard",
   "version": "0.1.0",
+  "description": "Local prompt-injection guard for AI agents and CLIProxyAPI response cleanup.",
   "private": true,
+  "license": "UNLICENSED",
   "type": "module",
+  "bin": {
+    "aipig": "bin/aipig"
+  },
+  "files": [
+    "bin/aipig",
+    "src/**/*.ts",
+    "!src/**/*.test.ts",
+    "src/adapters/proxy/cliproxy-plugin/",
+    "scripts/build-cliproxy-plugin.ts",
+    "examples/",
+    "fingerprints.json",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/zhexulong/ai-agent-prompt-injection-guard.git"
+  },
+  "bugs": {
+    "url": "https://github.com/zhexulong/ai-agent-prompt-injection-guard/issues"
+  },
+  "homepage": "https://github.com/zhexulong/ai-agent-prompt-injection-guard#readme",
+  "keywords": [
+    "ai-agent",
+    "prompt-injection",
+    "cliproxyapi",
+    "claude-code",
+    "opencode",
+    "codex"
+  ],
+  "engines": {
+    "bun": ">=1.3.0"
+  },
   "scripts": {
     "build": "bun build eval/history-replay.ts eval/capture-server.ts src/adapters/proxy/cliproxy.ts src/adapters/proxy/cliproxy-entry.ts src/adapters/codex/cli.ts src/adapters/claude/cli.ts src/adapters/opencode/plugin.ts --outdir dist --target bun --format esm",
     "build:cliproxy-plugin": "bun run scripts/build-cliproxy-plugin.ts",
@@ -10,6 +45,7 @@
     "cliproxy:doctor": "bun run scripts/aipig.ts cliproxy doctor",
     "cliproxy:install": "bun run scripts/aipig.ts cliproxy install",
     "eval:real-chain": "bun run scripts/real-chain-eval.ts",
+    "pack:audit": "node scripts/npm-pack-audit.mjs",
     "test": "bun test",
     "verify": "bun test && bun run build"
   },
