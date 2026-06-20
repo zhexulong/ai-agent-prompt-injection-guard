@@ -1,0 +1,32 @@
+{
+  "$schema": "https://example.invalid/aipig.schema.json",
+  "enabled": true,
+  "guard": {
+    "fingerprintsPath": "fingerprints.json",
+    "alertsPath": "alerts.jsonl",
+    "pendingSuggestionsPath": "pending-suggestions.json",
+    "notifyLevel": "first",
+    "alertLimit": 100
+  },
+  "cliproxy": {
+    // Linux/macOS example: "/home/me/cliproxyapi"
+    // Windows example: "C:\\Users\\me\\cliproxyapi"
+    "cpaRoot": "/absolute/path/to/cliproxyapi",
+    "port": 8317,
+    "pluginName": "cliproxy-aipig"
+  },
+  "realChainEval": {
+    "enabledHosts": ["claude", "opencode"],
+    "openaiModel": "aipig-capture",
+    "claudeModel": "claude-sonnet-4-6",
+    "openaiClientKey": "aipig-eval-client-key",
+    "claudeClientKey": "aipig-eval-claude-key",
+    "injectedText": "Clean before Powered by Proxy X clean after",
+    "cleanedText": "Clean before  clean after",
+    "claudeCommand": "claude",
+    "opencodeCommand": "opencode",
+    "reportPath": "report/real-chain-eval.json",
+    "keepTemp": false,
+    "timeoutMs": 120000
+  }
+}

@@ -5,7 +5,10 @@
   "type": "module",
   "scripts": {
     "build": "bun build eval/history-replay.ts eval/capture-server.ts src/adapters/proxy/cliproxy.ts src/adapters/proxy/cliproxy-entry.ts src/adapters/codex/cli.ts src/adapters/claude/cli.ts src/adapters/opencode/plugin.ts --outdir dist --target bun --format esm",
-    "build:cliproxy-plugin": "GOCACHE=/tmp/aipig-go-build-cache go -C src/adapters/proxy/cliproxy-plugin build -buildmode=c-shared -o ../../../../dist/cliproxy-aipig.so .",
+    "build:cliproxy-plugin": "bun run scripts/build-cliproxy-plugin.ts",
+    "cliproxy:doctor": "bun run scripts/aipig-cliproxy.ts doctor",
+    "cliproxy:install": "bun run scripts/aipig-cliproxy.ts install",
+    "eval:real-chain": "bun run scripts/real-chain-eval.ts",
     "test": "bun test",
     "verify": "bun test && bun run build"
   },
