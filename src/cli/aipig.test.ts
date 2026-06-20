@@ -72,7 +72,7 @@ test("cliproxy install writes backup and waits for hot reload without restarting
   expect(result.stdout).not.toContain("restart");
 });
 
-test("cliproxy doctor succeeds before install when prerequisites exist", async () => {
+test("cliproxy doctor prints human-readable checks by default", async () => {
   const root = tempRoot("aipig-cli-doctor");
   const cpaRoot = seedCpa(root);
   const configPath = join(root, "aipig.jsonc");
@@ -82,6 +82,25 @@ test("cliproxy doctor succeeds before install when prerequisites exist", async (
   writeFileSync(configPath, JSON.stringify({ cliproxy: { cpaRoot, port: 8317, pluginName: "cliproxy-aipig" } }));
 
   const result = await runAipigCli(["cliproxy", "doctor", "--config", configPath], { cwd: root, repoRoot: root });
+
+  expect(result.status).toBe(0);
+  expect(result.stdout).toContain("CLIProxyAPI doctor");
+  expect(result.stdout).toContain("[OK] CLIProxyAPI config");
+  expect(result.stdout).toContain("[WARN] Plugin installed");
+  expect(result.stdout).toContain("Next: aipig cliproxy install --config");
+  expect(() => JSON.parse(result.stdout)).toThrow();
+});
+
+test("cliproxy doctor keeps machine-readable JSON with --json", async () => {
+  const root = tempRoot("aipig-cli-doctor-json");
+  const cpaRoot = seedCpa(root);
+  const configPath = join(root, "aipig.jsonc");
+  mkdirSync(join(root, "dist", "src", "adapters", "proxy"), { recursive: true });
+  writeFileSync(join(root, "dist", "cliproxy-aipig.so"), "plugin");
+  writeFileSync(join(root, "dist", "src", "adapters", "proxy", "cliproxy-entry.js"), "entry");
+  writeFileSync(configPath, JSON.stringify({ cliproxy: { cpaRoot, port: 8317, pluginName: "cliproxy-aipig" } }));
+
+  const result = await runAipigCli(["cliproxy", "doctor", "--config", configPath, "--json"], { cwd: root, repoRoot: root });
   const payload = JSON.parse(result.stdout);
 
   expect(result.status).toBe(0);
@@ -89,6 +108,23 @@ test("cliproxy doctor succeeds before install when prerequisites exist", async (
   expect(payload.entryTarget).toBe(join(cpaRoot, "plugins", "cliproxy-aipig-entry.js"));
   expect(payload.checks.pluginTargetExists).toBe(false);
   expect(payload.checks.entryTargetExists).toBe(false);
+});
+
+test("cliproxy install explains how to recover when plugin artifacts are missing", async () => {
+  const root = tempRoot("aipig-cli-install-missing-artifact");
+  const cpaRoot = seedCpa(root);
+  const configPath = join(root, "aipig.jsonc");
+  writeFileSync(configPath, JSON.stringify({ cliproxy: { cpaRoot, port: 8317, pluginName: "cliproxy-aipig" } }));
+
+  const result = await runAipigCli(["cliproxy", "install", "--config", configPath, "--write"], {
+    cwd: root,
+    repoRoot: root,
+  });
+
+  expect(result.status).toBe(1);
+  expect(result.stderr).toContain("Missing CLIProxyAPI plugin artifact");
+  expect(result.stderr).toContain("aipig build-plugin");
+  expect(readFileSync(join(cpaRoot, "config.yaml"), "utf8")).not.toContain("cliproxy-aipig");
 });
 
 test("cliproxy uninstall removes only AIPIG and restore copies the backup back", async () => {

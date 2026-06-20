@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 // @ts-expect-error The audit entry is plain ESM so npm can run it without a build step.
-import { auditPackFiles } from "./npm-pack-audit.mjs";
+import { auditPackFiles, runPackDryRun } from "./npm-pack-audit.mjs";
 
 test("auditPackFiles accepts the intended npm package boundary", () => {
   expect(auditPackFiles([
@@ -42,4 +42,22 @@ test("auditPackFiles rejects tests, eval data, local reports, and missing runtim
     "forbidden package file: dist/src/adapters/proxy/cliproxy-entry.js",
     "forbidden package file: eval/fixtures/private-real-history/sample.jsonl",
   ]);
+});
+
+test("runPackDryRun invokes npm directly instead of nesting another node process", () => {
+  const calls: Array<{ command: string; args: string[] }> = [];
+  const result = runPackDryRun({
+    cache: "/tmp/aipig-cache",
+    spawnImpl(command: string, args: string[]) {
+      calls.push({ command, args });
+      return {
+        status: 0,
+        stdout: JSON.stringify([{ filename: "aipig-0.1.0.tgz", files: [] }]),
+        stderr: "",
+      };
+    },
+  });
+
+  expect(result.status).toBe(0);
+  expect(calls).toEqual([{ command: "npm", args: ["pack", "--dry-run", "--json"] }]);
 });

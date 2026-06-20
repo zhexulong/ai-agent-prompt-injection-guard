@@ -119,29 +119,19 @@ async function cliproxy(args: ParsedAipigArgs, repoRoot: string, cwd: string, fe
 
 function cliproxyDoctor(args: ParsedAipigArgs, repoRoot: string): AipigCliResult {
   const plan = planFromArgs(args, repoRoot);
-  const result = {
-    cpaRoot: plan.cpaRoot,
-    cpaBin: plan.cpaBin,
-    cpaConfig: plan.cpaConfig,
-    pluginArtifact: plan.pluginArtifact,
-    pluginTarget: plan.pluginTarget,
-    entryArtifact: plan.entryArtifact,
-    entryTarget: plan.entryTarget,
-    checks: {
-      cpaRootExists: existsSync(plan.cpaRoot),
-      cpaBinExists: existsSync(plan.cpaBin),
-      cpaConfigExists: existsSync(plan.cpaConfig),
-      pluginArtifactExists: existsSync(plan.pluginArtifact),
-      pluginTargetExists: existsSync(plan.pluginTarget),
-      entryArtifactExists: existsSync(plan.entryArtifact),
-      entryTargetExists: existsSync(plan.entryTarget),
-    },
-  };
+  const result = createCliProxyDoctorResult(plan);
   const prerequisitesReady = result.checks.cpaRootExists
     && result.checks.cpaBinExists
     && result.checks.cpaConfigExists
     && result.checks.pluginArtifactExists
     && result.checks.entryArtifactExists;
+  if (!args.json) {
+    return {
+      status: prerequisitesReady ? 0 : 1,
+      stdout: formatCliProxyDoctor(result, args),
+      stderr: "",
+    };
+  }
   return {
     status: prerequisitesReady ? 0 : 1,
     stdout: JSON.stringify(result, null, 2),
@@ -151,7 +141,7 @@ function cliproxyDoctor(args: ParsedAipigArgs, repoRoot: string): AipigCliResult
 
 function cliproxyDiff(args: ParsedAipigArgs, repoRoot: string): AipigCliResult {
   const { plan, config } = planAndConfig(args, repoRoot);
-  const original = readFileSync(plan.cpaConfig, "utf8");
+  const original = readCliProxyConfig(plan);
   const patched = patchCliProxyPluginConfig(original, {
     cpaRoot: plan.cpaRoot,
     pluginName: config.cliproxy.pluginName,
@@ -161,7 +151,8 @@ function cliproxyDiff(args: ParsedAipigArgs, repoRoot: string): AipigCliResult {
 
 async function cliproxyInstall(args: ParsedAipigArgs, repoRoot: string, cwd: string, fetchImpl?: typeof fetch): Promise<AipigCliResult> {
   const { plan, config } = planAndConfig(args, repoRoot);
-  const original = readFileSync(plan.cpaConfig, "utf8");
+  if (args.write) assertInstallArtifactsExist(plan);
+  const original = readCliProxyConfig(plan);
   const patched = patchCliProxyPluginConfig(original, {
     cpaRoot: plan.cpaRoot,
     pluginName: config.cliproxy.pluginName,
@@ -205,7 +196,7 @@ function absolutize(path: string, baseDir: string): string {
 
 function cliproxyUninstall(args: ParsedAipigArgs, repoRoot: string): AipigCliResult {
   const { plan, config } = planAndConfig(args, repoRoot);
-  const original = readFileSync(plan.cpaConfig, "utf8");
+  const original = readCliProxyConfig(plan);
   const patched = unpatchCliProxyPluginConfig(original, config.cliproxy.pluginName);
   if (!args.write) return ok(`${patched}\ndry-run only. Re-run with --write to update config.yaml.\n`);
   const backup = `${plan.cpaConfig}.aipig-backup-${Date.now()}`;
@@ -221,6 +212,70 @@ function cliproxyRestore(args: ParsedAipigArgs, repoRoot: string): AipigCliResul
   if (!args.write) return ok(`${backup}\ndry-run only. Re-run with --write to restore config.yaml.\n`);
   writeFileSync(plan.cpaConfig, backup, { mode: 0o600 });
   return ok(JSON.stringify({ restored: plan.cpaConfig, backup: resolve(args.backup) }, null, 2));
+}
+
+type CliProxyDoctorResult = ReturnType<typeof createCliProxyDoctorResult>;
+
+function createCliProxyDoctorResult(plan: ReturnType<typeof planFromArgs>) {
+  return {
+    cpaRoot: plan.cpaRoot,
+    cpaBin: plan.cpaBin,
+    cpaConfig: plan.cpaConfig,
+    pluginArtifact: plan.pluginArtifact,
+    pluginTarget: plan.pluginTarget,
+    entryArtifact: plan.entryArtifact,
+    entryTarget: plan.entryTarget,
+    checks: {
+      cpaRootExists: existsSync(plan.cpaRoot),
+      cpaBinExists: existsSync(plan.cpaBin),
+      cpaConfigExists: existsSync(plan.cpaConfig),
+      pluginArtifactExists: existsSync(plan.pluginArtifact),
+      pluginTargetExists: existsSync(plan.pluginTarget),
+      entryArtifactExists: existsSync(plan.entryArtifact),
+      entryTargetExists: existsSync(plan.entryTarget),
+    },
+  };
+}
+
+function formatCliProxyDoctor(result: CliProxyDoctorResult, args: ParsedAipigArgs): string {
+  const lines = [
+    "CLIProxyAPI doctor",
+    formatCheck(result.checks.cpaRootExists, "CLIProxyAPI root", result.cpaRoot),
+    formatCheck(result.checks.cpaBinExists, "CLIProxyAPI binary", result.cpaBin),
+    formatCheck(result.checks.cpaConfigExists, "CLIProxyAPI config", result.cpaConfig),
+    formatCheck(result.checks.pluginArtifactExists, "Native plugin artifact", result.pluginArtifact),
+    formatCheck(result.checks.entryArtifactExists, "JS entry artifact", result.entryArtifact),
+    formatCheck(result.checks.pluginTargetExists, "Plugin installed", result.pluginTarget, "WARN"),
+    formatCheck(result.checks.entryTargetExists, "JS entry installed", result.entryTarget, "WARN"),
+    "",
+  ];
+  if (!result.checks.pluginArtifactExists || !result.checks.entryArtifactExists) {
+    lines.push("Next: aipig build-plugin");
+  } else if (!result.checks.pluginTargetExists || !result.checks.entryTargetExists) {
+    lines.push(`Next: aipig cliproxy install${args.config ? ` --config ${args.config}` : ""} --write`);
+  } else {
+    lines.push("Next: CLIProxyAPI is ready to load AIPIG through hot reload.");
+  }
+  return `${lines.join("\n")}\n`;
+}
+
+function formatCheck(ok: boolean, label: string, path: string, missingLevel: "FAIL" | "WARN" = "FAIL"): string {
+  return `[${ok ? "OK" : missingLevel}] ${label}: ${path}`;
+}
+
+function readCliProxyConfig(plan: ReturnType<typeof planFromArgs>): string {
+  if (!existsSync(plan.cpaConfig)) {
+    throw new Error(`CLIProxyAPI config not found: ${plan.cpaConfig}. Check cliproxy.cpaRoot or AIPIG_CLIPROXY_CPA_ROOT.`);
+  }
+  return readFileSync(plan.cpaConfig, "utf8");
+}
+
+function assertInstallArtifactsExist(plan: ReturnType<typeof planFromArgs>): void {
+  const missing: string[] = [];
+  if (!existsSync(plan.pluginArtifact)) missing.push(`Missing CLIProxyAPI plugin artifact: ${plan.pluginArtifact}`);
+  if (!existsSync(plan.entryArtifact)) missing.push(`Missing CLIProxyAPI JS entry artifact: ${plan.entryArtifact}`);
+  if (missing.length === 0) return;
+  throw new Error(`${missing.join("\n")}\nRun \`aipig build-plugin\` and retry the install.`);
 }
 
 function planFromArgs(args: ParsedAipigArgs, repoRoot: string) {

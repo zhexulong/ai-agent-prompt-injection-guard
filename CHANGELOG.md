@@ -5,7 +5,10 @@
 - Prepares the npm package name `aipig` while keeping `private: true` until the final publish decision.
 - Switches package metadata to Apache-2.0 and includes `LICENSE` and `NOTICE`.
 - Documents the npm user path first: install `aipig`, run `npx aipig init`, build the CLIProxyAPI plugin, inspect the install plan, then install.
-- Validates a local `npm pack` tarball install in a clean project, including `aipig init`, `aipig build-plugin`, and `aipig cliproxy doctor`.
+- Validates a local `npm pack` tarball install in a clean project, including `aipig init`, `aipig build-plugin`, `aipig cliproxy doctor`, real CLIProxyAPI install with hot reload, and restore.
+- Makes `aipig cliproxy doctor` human-readable by default while keeping `--json` for scripts.
+- Adds clearer install recovery messages when the CLIProxyAPI plugin artifacts have not been built.
+- Documents CLIProxyAPI compatibility expectations and common install recovery steps.
 
 ## v0.1.0 Source Release
 

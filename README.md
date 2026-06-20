@@ -55,6 +55,12 @@ npx aipig cliproxy doctor --config .opencode/aipig.jsonc
 npx aipig cliproxy diff --config .opencode/aipig.jsonc
 ```
 
+`doctor` prints a human-readable checklist by default. Use `--json` when another script needs the raw paths and check results:
+
+```bash
+npx aipig cliproxy doctor --config .opencode/aipig.jsonc --json
+```
+
 Install:
 
 ```bash
@@ -69,6 +75,24 @@ Rollback commands:
 npx aipig cliproxy uninstall --config .opencode/aipig.jsonc --write
 npx aipig cliproxy restore --config .opencode/aipig.jsonc --backup /path/to/config.yaml.aipig-backup-... --write
 ```
+
+## Troubleshooting
+
+- `cliproxy.cpaRoot is required`: set `cliproxy.cpaRoot` in `.opencode/aipig.jsonc` or set `AIPIG_CLIPROXY_CPA_ROOT`.
+- `CLIProxyAPI config not found`: check that `cliproxy.cpaRoot` points at the CLIProxyAPI directory that contains `config.yaml`.
+- `Missing CLIProxyAPI plugin artifact`: run `npx aipig build-plugin`, then run `npx aipig cliproxy doctor --config .opencode/aipig.jsonc` again.
+- `hotReload.ok` is `false` after install: AIPIG already copied files and patched `config.yaml`, but CLIProxyAPI did not answer the hot-reload probe on the configured port. Check `cliproxy.port`, CPA logs, and `http://127.0.0.1:<port>/healthz`.
+
+## CLIProxyAPI Compatibility
+
+AIPIG expects a CLIProxyAPI build with:
+
+- plugin support enabled through `config.yaml`
+- a `plugins/` directory under the CPA root
+- hot reload after `config.yaml` changes
+- `GET /healthz` on the configured local port
+
+The installer patches only the plugin configuration block for `cliproxy-aipig`, writes a timestamped backup beside `config.yaml`, and does not restart CPA.
 
 ## Config Files
 

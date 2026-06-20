@@ -41,31 +41,17 @@ export function auditPackFiles(files) {
   return issues;
 }
 
-function runPackDryRun() {
-  const cache = process.env.npm_config_cache ?? mkdtempSync(join(tmpdir(), "aipig-npm-cache-"));
-  const code = [
-    "import { spawnSync } from 'node:child_process';",
-    "const result = spawnSync('npm', ['pack', '--dry-run', '--json'], {",
-    "  encoding: 'utf8',",
-    "  env: { ...process.env, npm_config_cache: process.env.npm_config_cache },",
-    "});",
-    "process.stdout.write(JSON.stringify({",
-    "  status: result.error ? 1 : result.status,",
-    "  stdout: result.stdout,",
-    "  stderr: result.stderr,",
-    "  error: result.error?.message,",
-    "}));",
-  ].join("\n");
-  const result = spawnSync(process.execPath, ["--input-type=module", "-e", code], {
+export function runPackDryRun(options = {}) {
+  const cache = options.cache ?? process.env.npm_config_cache ?? mkdtempSync(join(tmpdir(), "aipig-npm-cache-"));
+  const spawnImpl = options.spawnImpl ?? spawnSync;
+  const result = spawnImpl("npm", ["pack", "--dry-run", "--json"], {
     encoding: "utf8",
     env: { ...process.env, npm_config_cache: cache },
   });
-  if (result.status !== 0) return result;
-  const payload = JSON.parse(result.stdout);
   return {
-    status: payload.status,
-    stdout: payload.stdout,
-    stderr: payload.error ? `${payload.error}\n${payload.stderr ?? ""}` : payload.stderr,
+    status: result.error ? 1 : (result.status ?? 1),
+    stdout: result.stdout ?? "",
+    stderr: result.error ? `${result.error.message}\n${result.stderr ?? ""}` : (result.stderr ?? ""),
   };
 }
 
