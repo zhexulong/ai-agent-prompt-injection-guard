@@ -106,14 +106,14 @@ Windows real-chain verification is not complete yet. The install paths are imple
 
 ## Current Coverage
 
-| Tool | Path | Response Text Injection | Tool Result Injection | Evidence |
-| --- | --- | --- | --- | --- |
-| Claude | Direct adapter | Display-layer mock covered | Mock covered | [matrix](eval/reports/anti-injection-matrix.md#claude-direct) |
-| Claude | CLIProxyAPI | Real `/v1/messages` and Claude CLI two-turn covered | Proxy tool-result path pending | [matrix](eval/reports/anti-injection-matrix.md#claude-proxy) |
-| OpenCode | Direct adapter | Mock covered | Mock covered | [matrix](eval/reports/anti-injection-matrix.md#opencode-direct) |
-| OpenCode | CLIProxyAPI | Real OpenCode two-turn covered | Proxy tool-result path pending | [matrix](eval/reports/anti-injection-matrix.md#opencode-proxy) |
-| Codex | Direct adapter | Real direct response text is flagged but retained by host | Mock covered | [matrix](eval/reports/anti-injection-matrix.md#codex-direct) |
-| Codex | CLIProxyAPI | Real direct API and Codex CLI two-turn covered | Proxy tool-result path pending | [matrix](eval/reports/anti-injection-matrix.md#codex-proxy) |
+| Tool | Path | Response Text Injection | Tool Result Injection | User View | Next AI Turn | Evidence |
+| --- | --- | --- | --- | --- | --- | --- |
+| Claude Code | CLIProxyAPI | Removed before Claude stores it | Not covered on the proxy path yet | Injected banners are stripped from responses | Cleaned response text is carried forward | [matrix](eval/reports/anti-injection-matrix.md#claude-proxy) |
+| Claude Code | Direct hooks | Can be hidden from display only | Removed before Claude reads tool output | Tool-output injections are removed; response banners may only be hidden on screen | Tool results are cleaned; response text may still remain in host context | [matrix](eval/reports/anti-injection-matrix.md#claude-direct) |
+| OpenCode | CLIProxyAPI | Removed before OpenCode stores it | Not covered on the proxy path yet | Injected banners are stripped from responses | Cleaned response text is carried forward | [matrix](eval/reports/anti-injection-matrix.md#opencode-proxy) |
+| OpenCode | Direct plugin | Removed by the plugin | Removed by the plugin | Injected response and tool-result text are removed | Cleaned content is sent onward | [matrix](eval/reports/anti-injection-matrix.md#opencode-direct) |
+| Codex | CLIProxyAPI | Removed before Codex receives it | Not covered on the proxy path yet | Injected banners are stripped from responses | Cleaned response text is carried forward | [matrix](eval/reports/anti-injection-matrix.md#codex-proxy) |
+| Codex | Direct hooks | Alert only; Codex cannot rewrite assistant responses here | Replaced for the model with hook feedback | Response banners can still appear; tool-result replacements are surfaced through hook feedback | Response banners may remain; tool results are cleaned | [matrix](eval/reports/anti-injection-matrix.md#codex-direct) |
 
 Usage-only token padding is not rewritten. It is logged and surfaced as an alert.
 
