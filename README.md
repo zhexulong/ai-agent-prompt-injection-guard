@@ -21,17 +21,18 @@ Prerequisites:
 - Go toolchain, for building the native CLIProxyAPI plugin bridge
 - CLIProxyAPI v7 with plugin support
 
-Install dependencies and build the plugin:
+After the npm package is published, install AIPIG:
 
 ```bash
-npm install
-bun run aipig -- build-plugin
+npm install --save-dev aipig
 ```
+
+Before npm publication, use a source checkout or a local tarball; source checkout commands are in [Development](#development).
 
 Create a config file:
 
 ```bash
-bun run aipig -- init --config .opencode/aipig.jsonc
+npx aipig init --config .opencode/aipig.jsonc
 ```
 
 Edit `.opencode/aipig.jsonc` and set:
@@ -49,14 +50,15 @@ Edit `.opencode/aipig.jsonc` and set:
 Check the install plan:
 
 ```bash
-bun run aipig -- cliproxy doctor --config .opencode/aipig.jsonc
-bun run aipig -- cliproxy diff --config .opencode/aipig.jsonc
+npx aipig build-plugin
+npx aipig cliproxy doctor --config .opencode/aipig.jsonc
+npx aipig cliproxy diff --config .opencode/aipig.jsonc
 ```
 
 Install:
 
 ```bash
-bun run aipig -- cliproxy install --config .opencode/aipig.jsonc --write
+npx aipig cliproxy install --config .opencode/aipig.jsonc --write
 ```
 
 Install copies the native plugin and bundled JS entry into CLIProxyAPI `plugins/`, writes a runtime `.opencode/aipig.jsonc` under the CLIProxyAPI directory, patches `config.yaml`, and waits for CLIProxyAPI hot reload. It does not restart CPA by default.
@@ -64,8 +66,8 @@ Install copies the native plugin and bundled JS entry into CLIProxyAPI `plugins/
 Rollback commands:
 
 ```bash
-bun run aipig -- cliproxy uninstall --config .opencode/aipig.jsonc --write
-bun run aipig -- cliproxy restore --config .opencode/aipig.jsonc --backup /path/to/config.yaml.aipig-backup-... --write
+npx aipig cliproxy uninstall --config .opencode/aipig.jsonc --write
+npx aipig cliproxy restore --config .opencode/aipig.jsonc --backup /path/to/config.yaml.aipig-backup-... --write
 ```
 
 ## Config Files
@@ -160,6 +162,15 @@ eval/reports/history-replay.md
 Trusted system-prompt containers such as Codex `session_meta.base_instructions` are ignored during replay. The same system-prompt-like text is still suspicious if it appears in `response_text` or `tool_result`.
 
 ## Development
+
+Source checkout setup:
+
+```bash
+npm install
+bun run aipig -- build-plugin
+bun run aipig -- init --config .opencode/aipig.jsonc
+bun run aipig -- cliproxy doctor --config .opencode/aipig.jsonc
+```
 
 Run checks:
 

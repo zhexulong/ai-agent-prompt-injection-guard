@@ -4,7 +4,9 @@ import { readFileSync } from "node:fs";
 const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
 
 test("npm package metadata exposes the source CLI without enabling publish yet", () => {
+  expect(packageJson.name).toBe("aipig");
   expect(packageJson.private).toBe(true);
+  expect(packageJson.license).toBe("Apache-2.0");
   expect(packageJson.description).toContain("prompt-injection");
   expect(packageJson.bin).toEqual({ aipig: "bin/aipig" });
   expect(packageJson.files).toEqual([
@@ -17,6 +19,8 @@ test("npm package metadata exposes the source CLI without enabling publish yet",
     "fingerprints.json",
     "README.md",
     "CHANGELOG.md",
+    "LICENSE",
+    "NOTICE",
   ]);
   expect(packageJson.repository.url).toBe("git+ssh://git@github.com/zhexulong/ai-agent-prompt-injection-guard.git");
   expect(packageJson.bugs.url).toBe("https://github.com/zhexulong/ai-agent-prompt-injection-guard/issues");
@@ -48,4 +52,10 @@ test("npm bin entry is a Bun executable that delegates to the source CLI", () =>
   expect(bin.startsWith("#!/usr/bin/env bun\n")).toBe(true);
   expect(bin).toContain("../src/cli/aipig");
   expect(bin).toContain("runAipigCli");
+});
+
+test("license files declare Apache 2.0 and project copyright", () => {
+  expect(readFileSync("LICENSE", "utf8")).toContain("Apache License");
+  expect(readFileSync("LICENSE", "utf8")).toContain("Version 2.0");
+  expect(readFileSync("NOTICE", "utf8")).toContain("Copyright 2026 zhexulong");
 });
