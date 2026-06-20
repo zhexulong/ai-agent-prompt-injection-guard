@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AIPIG Configuration",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "enabled": { "type": "boolean" },
+    "guard": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "fingerprintsPath": { "type": "string" },
+        "alertsPath": { "type": "string" },
+        "pendingSuggestionsPath": { "type": "string" },
+        "notifyLevel": { "enum": ["first", "always", "never"] },
+        "alertLimit": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "cliproxy": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "cpaRoot": { "type": "string" },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "pluginName": { "type": "string" }
+      }
+    },
+    "realChainEval": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabledHosts": {
+          "type": "array",
+          "items": { "enum": ["claude", "opencode", "codex"] }
+        },
+        "openaiModel": { "type": "string" },
+        "claudeModel": { "type": "string" },
+        "openaiClientKey": { "type": "string" },
+        "claudeClientKey": { "type": "string" },
+        "injectedText": { "type": "string" },
+        "cleanedText": { "type": "string" },
+        "claudeCommand": { "type": "string" },
+        "opencodeCommand": { "type": "string" },
+        "reportPath": { "type": "string" },
+        "keepTemp": { "type": "boolean" },
+        "timeoutMs": { "type": "integer", "minimum": 1000 }
+      }
+    }
+  }
+}

@@ -1,5 +1,5 @@
 {
-  "$schema": "https://example.invalid/aipig.schema.json",
+  "$schema": "https://raw.githubusercontent.com/zhexulong/ai-agent-prompt-injection-guard/master/examples/aipig.schema.json",
   "enabled": true,
   "guard": {
     "fingerprintsPath": "fingerprints.json",

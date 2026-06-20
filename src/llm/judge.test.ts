@@ -11,7 +11,7 @@ test("parses a suggested fingerprint from an OpenAI-compatible response", async 
     choices: [{ message: { content: JSON.stringify({ id: "new1", type: "literal", pattern: "Injected by Y", note: "banner" }) } }],
   })));
   const result = await judgeUnknownPattern(
-    { baseUrl: "https://example.invalid", apiKey: "k", model: "m", fetchImpl: fetchMock as typeof fetch },
+    { baseUrl: "https://example.invalid", apiKey: "k", model: "m", fetchImpl: fetchMock as unknown as typeof fetch },
     "Injected by Y",
     [],
   );

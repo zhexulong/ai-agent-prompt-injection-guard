@@ -29,7 +29,7 @@ test("PostToolUse returns updatedToolOutput for high-confidence matches", async 
     session_id: "s1",
     tool_response: "ok Powered by Proxy X end",
   }, baseConfig);
-  expect(result.hookSpecificOutput.updatedToolOutput).toBe("ok  end");
+  expect(result.hookSpecificOutput?.updatedToolOutput).toBe("ok  end");
   expect(result.systemMessage).toContain("tool_injection");
 });
 
@@ -39,7 +39,7 @@ test("MessageDisplay rewrites visible text only", async () => {
     session_id: "s2",
     message_text: "tail Powered by Proxy X",
   }, baseConfig);
-  expect(result.hookSpecificOutput.displayContent).toBe("tail ");
+  expect(result.hookSpecificOutput?.displayContent).toBe("tail ");
   expect(result.systemMessage).toContain("response_injection");
 });
 

@@ -1,34 +1,72 @@
-# ai-agent-prompt-injection-guard
+# AI Agent Prompt Injection Guard
 
-Local guard for AI-agent prompt-injection and token-padding artifacts. The current implementation provides the core detection engine, bounded fingerprint suggestions, history replay, a CLIProxyAPI-compatible proxy response interceptor, plus Claude Code, Codex, and OpenCode adapters. Codex direct response-text capture, Codex through CLIProxyAPI response rewriting, Claude through CLIProxyAPI response rewriting, and OpenCode through CLIProxyAPI response rewriting have been exercised against real local chains.
+AIPIG is a local guard for AI-agent prompt-injection banners, proxy-added response text, suspicious tool-result text, and token-padding artifacts.
 
-## Capability Matrix
+The main supported deployment path is a CLIProxyAPI response interceptor. When Claude Code, OpenCode, or Codex talks through CLIProxyAPI, AIPIG can remove known injected response text before the client stores it and before the next model request reads it back.
 
-Evidence links point to `eval/reports/anti-injection-matrix.md`. Cells marked `待 eval` must not be treated as release claims.
+## What It Does
 
-| 工具 | 链路 | 响应文本注入 | 工具结果注入 | 用户视角 | 后续 AI 实读 | 证据 |
-| --- | --- | --- | --- | --- | --- | --- |
-| Claude | 直连 | display-only/mock 已测，真实链路待 eval | mock 已测，真实链路待 eval | 响应显示层清洗；工具结果可能仍显示原文 | 响应原文保留；工具结果 mock 中不含注入 | [报告](eval/reports/anti-injection-matrix.md#claude-direct) |
-| Claude | 中转/代理 | 真实 CLIProxyAPI direct `/v1/messages` 和 Claude CLI 两轮确认响应文本可清洗 | 直连 adapter mock 已测，proxy 工具链路待 eval | proxy 返回清洗响应文本 | 第二轮 upstream request 含清洗后的上一轮 assistant 文本，不含完整注入句 | [报告](eval/reports/anti-injection-matrix.md#claude-proxy) |
-| OpenCode | 直连 | mock 已测，真实链路待 eval | mock 已测，真实链路待 eval | response/tool 输出清洗版 | mock 下一轮请求不含注入 | [报告](eval/reports/anti-injection-matrix.md#opencode-direct) |
-| OpenCode | 中转/代理 | 真实 CLIProxyAPI 两轮确认响应文本可清洗 | mock 已测，真实工具链路待 eval | response 输出清洗版 | 第二轮 upstream request 含清洗后的上一轮 assistant 文本，不含完整注入句 | [报告](eval/reports/anti-injection-matrix.md#opencode-proxy) |
-| Codex | 直连 | flag-only/mock 已测；真实链路确认响应原文保留 | mock 已测，真实链路待 eval | 响应原文保留；工具结果写入清洗版 feedback | 响应原文保留并进入下一轮实读；工具结果 mock 中不含注入 | [报告](eval/reports/anti-injection-matrix.md#codex-direct) |
-| Codex | 中转/代理 | 真实 CLIProxyAPI direct API 和 Codex CLI 两轮均确认响应文本可清洗 | 直连 adapter mock 已测，proxy 工具链路待 eval | proxy 返回清洗响应文本 | 第二轮 upstream request 含清洗后的上一轮 assistant 文本，不含完整注入句 | [报告](eval/reports/anti-injection-matrix.md#codex-proxy) |
+- Strips known response-text injections in CLIProxyAPI responses.
+- Flags or rewrites tool-result injections in direct host adapters where the host exposes a safe hook.
+- Keeps positive and negative fingerprints in one `fingerprints.json` file.
+- Suggests bounded regex fingerprints after repeated same-session patterns.
+- Writes alert and pending-suggestion logs locally.
+- Provides a real-chain eval for Claude and OpenCode through CLIProxyAPI.
 
-注水另列：可定位注水内容按所在位置套用上表；纯 usage 数字虚高不改内容，只写告警并做展示提示，证据见 [padding 报告](eval/reports/anti-injection-matrix.md#padding)。
+## Quick Start
 
-## Install
+Prerequisites:
+
+- Bun
+- Go toolchain, for building the native CLIProxyAPI plugin bridge
+- CLIProxyAPI v7 with plugin support
+
+Install dependencies and build:
 
 ```bash
-bun install
-bun test
+npm install
 bun run build
 bun run build:cliproxy-plugin
 ```
 
-## CLIProxyAPI Setup
+Create a config file:
+
+```bash
+mkdir -p .opencode
+cp examples/aipig.config.example.jsonc .opencode/aipig.jsonc
+```
+
+Edit `.opencode/aipig.jsonc` and set:
+
+```jsonc
+{
+  "cliproxy": {
+    "cpaRoot": "/absolute/path/to/cliproxyapi",
+    "port": 8317,
+    "pluginName": "cliproxy-aipig"
+  }
+}
+```
+
+Check the install plan:
+
+```bash
+bun run cliproxy:doctor -- --config .opencode/aipig.jsonc
+bun run cliproxy:install -- --config .opencode/aipig.jsonc
+```
+
+`cliproxy:install` is dry-run by default. To copy the plugin and update CLIProxyAPI `config.yaml`:
+
+```bash
+bun run cliproxy:install -- --config .opencode/aipig.jsonc --write
+```
+
+Restart CLIProxyAPI after installing.
+
+## Config Files
 
 AIPIG uses its own config file instead of putting guard settings into `opencode.json`.
+
 Config files are loaded in this order, with later files overriding earlier files:
 
 1. Linux/macOS global: `~/.config/opencode/aipig.jsonc` or `aipig.json`
@@ -37,42 +75,67 @@ Config files are loaded in this order, with later files overriding earlier files
 4. Project config: `.opencode/aipig.jsonc` or `aipig.json`
 5. Explicit file: `AIPIG_CONFIG=/path/to/aipig.jsonc` or `--config /path/to/aipig.jsonc`
 
-Start from:
+Important environment overrides:
+
+- `AIPIG_CONFIG`: explicit `aipig.jsonc` or `aipig.json` path
+- `AIPIG_FINGERPRINTS_PATH`: fingerprint library, default `fingerprints.json`
+- `AIPIG_ALERTS_PATH`: alert log, default `alerts.jsonl`
+- `AIPIG_PENDING_SUGGESTIONS_PATH`: pending suggestion rolling JSON array, default `pending-suggestions.json`
+- `AIPIG_NOTIFY_LEVEL`: `first`, `always`, or `never`
+- `AIPIG_ALERT_LIMIT`: alert ring size, default `100`
+- `AIPIG_CLIPROXY_CPA_ROOT`: CLIProxyAPI directory
+- `AIPIG_CLIPROXY_PORT`: CLIProxyAPI port, default `8317`
+- `AIPIG_JUDGE_BASE_URL`, `AIPIG_JUDGE_API_KEY`, `AIPIG_JUDGE_MODEL`: optional Tier 1 judge
+
+## Windows
+
+The config loader supports `%APPDATA%\opencode\aipig.jsonc`.
+
+The native plugin build script emits:
+
+- Linux: `dist/cliproxy-aipig.so`
+- macOS: `dist/cliproxy-aipig.dylib`
+- Windows: `dist/cliproxy-aipig.dll`
+
+Windows real-chain verification is not complete yet. The install paths are implemented, but Windows should be validated on a real Windows host before calling it release-ready.
+
+## Current Coverage
+
+| Tool | Path | Response Text Injection | Tool Result Injection | Evidence |
+| --- | --- | --- | --- | --- |
+| Claude | Direct adapter | Display-layer mock covered | Mock covered | [matrix](eval/reports/anti-injection-matrix.md#claude-direct) |
+| Claude | CLIProxyAPI | Real `/v1/messages` and Claude CLI two-turn covered | Proxy tool-result path pending | [matrix](eval/reports/anti-injection-matrix.md#claude-proxy) |
+| OpenCode | Direct adapter | Mock covered | Mock covered | [matrix](eval/reports/anti-injection-matrix.md#opencode-direct) |
+| OpenCode | CLIProxyAPI | Real OpenCode two-turn covered | Proxy tool-result path pending | [matrix](eval/reports/anti-injection-matrix.md#opencode-proxy) |
+| Codex | Direct adapter | Real direct response text is flagged but retained by host | Mock covered | [matrix](eval/reports/anti-injection-matrix.md#codex-direct) |
+| Codex | CLIProxyAPI | Real direct API and Codex CLI two-turn covered | Proxy tool-result path pending | [matrix](eval/reports/anti-injection-matrix.md#codex-proxy) |
+
+Usage-only token padding is not rewritten. It is logged and surfaced as an alert.
+
+## Real Chain Eval
+
+The real-chain eval temporarily adds local eval keys/upstreams to CLIProxyAPI, restarts CPA, runs two turns per enabled host, writes a local report, then restores the original CPA config and restarts CPA again.
 
 ```bash
-cp examples/aipig.config.example.jsonc .opencode/aipig.jsonc
+bun run build:cliproxy-plugin
+bun run eval:real-chain -- --config .opencode/aipig.jsonc
 ```
 
-Set `cliproxy.cpaRoot` to your CLIProxyAPI directory, then check the install plan:
-
-```bash
-bun run cliproxy:doctor -- --config .opencode/aipig.jsonc
-bun run cliproxy:install -- --config .opencode/aipig.jsonc
-```
-
-`cliproxy:install` is dry-run by default and prints the patched `config.yaml`.
-To actually copy the native plugin and update CLIProxyAPI config:
-
-```bash
-bun run cliproxy:install -- --config .opencode/aipig.jsonc --write
-```
-
-Restart CLIProxyAPI after installing. On Windows, use the same commands from PowerShell; the plugin artifact is built as `dist/cliproxy-aipig.dll`.
+The report path defaults to `report/real-chain-eval.json`. `report/` is local evidence and should not be committed.
 
 ## History Replay
 
-Replay is local and read-only. It streams the explicit input file, defaults to 10,000 parsed records, writes only to this repository, and never writes `fingerprints.json`.
-Trusted system-prompt containers such as Codex `session_meta.base_instructions` are ignored during replay. The same system-prompt-like text is still suspicious if it appears in `response_text` or `tool_result`, so attackers cannot bypass detection by copying a normal host prompt into model-visible output.
+Replay is local and read-only. It streams explicit input files, defaults to 10,000 parsed records, writes only to this repository, and never writes `fingerprints.json`.
 
 ```bash
 bun run eval/history-replay.ts --input /absolute/path/to/history.jsonl --max-records 10000
 ```
 
-Multiple inputs can be layered for eval, for example a local copied history fixture plus a synthetic middlebox-injection overlay:
+You can layer a copied local fixture with synthetic injection overlays:
 
 ```bash
 bun run eval/history-replay.ts \
-  --input eval/fixtures/private-real-history/codex-latest-2026-06-19.jsonl \
+  --input /absolute/path/to/copied-history.jsonl \
   --input eval/fixtures/history-overlays/middlebox-injections.jsonl \
   --max-records 1200
 ```
@@ -83,43 +146,22 @@ Report output:
 eval/reports/history-replay.md
 ```
 
-## Proxy Transform
+Trusted system-prompt containers such as Codex `session_meta.base_instructions` are ignored during replay. The same system-prompt-like text is still suspicious if it appears in `response_text` or `tool_result`.
 
-The implemented proxy adapter can sanitize response text when the user's chain has a response-transform hook. `src/adapters/proxy/cliproxy-entry.ts` exposes a CLIProxyAPI plugin-call entry for `response.intercept_after` and `response.intercept_stream_chunk`; `bun run build:cliproxy-plugin` builds the native `.so` bridge required by CLIProxyAPI v7.
+## Development
 
-```typescript
-import { rewriteProxyResponse } from "./src/adapters/proxy/cliproxy";
-
-const result = await rewriteProxyResponse({
-  text: "hello Powered by Proxy X world",
-  sessionId: "s1",
-  host: "proxy",
-});
-```
-
-## Config
-
-- `AIPIG_CONFIG`: explicit `aipig.jsonc` / `aipig.json` path
-- `AIPIG_FINGERPRINTS_PATH`: fingerprint library, default `fingerprints.json`
-- `AIPIG_ALERTS_PATH`: alert log, default `alerts.jsonl`
-- `AIPIG_PENDING_SUGGESTIONS_PATH`: pending suggestion rolling JSON array, default `pending-suggestions.json`, newest 100 entries
-- `AIPIG_NOTIFY_LEVEL`: `first` / `always` / `never`
-- `AIPIG_ALERT_LIMIT`: alert ring size, default `100`
-- `AIPIG_CLIPROXY_CPA_ROOT`: CLIProxyAPI directory
-- `AIPIG_CLIPROXY_PORT`: CLIProxyAPI port, default `8317`
-- `AIPIG_JUDGE_BASE_URL` / `AIPIG_JUDGE_API_KEY` / `AIPIG_JUDGE_MODEL`: optional Tier 1 judge
-
-## Real Chain Eval
-
-The real-chain eval uses the same config file and currently exercises Claude and OpenCode through CLIProxyAPI. It temporarily adds eval keys/upstreams to CLIProxyAPI, restarts CPA, runs two turns per host, writes a local report, then restores the original CPA config and restarts CPA again.
+Run the standard checks:
 
 ```bash
+bun test
+bun run build
 bun run build:cliproxy-plugin
-bun run eval:real-chain -- --config .opencode/aipig.jsonc
 ```
 
-The report path defaults to `report/real-chain-eval.json`. `report/` is local evidence and should not be committed.
+Run everything used by `verify`:
 
-## Current Boundary
+```bash
+bun run verify
+```
 
-The core engine, CLIProxyAPI proxy entry, Claude hook adapter, Codex hook adapter, and OpenCode plugin adapter are implemented. Real request-body capture eval is complete for Codex direct response-text injection. Existing CLIProxyAPI `127.0.0.1:8317` was temporarily configured with the native plugin and a local upstream; direct `/v1/responses`, direct `/v1/messages`, a real two-turn `codex exec` session, a real two-turn `claude -p` session, and a real two-turn `opencode run` session returned cleaned text, and the second upstream requests contained cleaned prior assistant text instead of the full injected sentence.
+`verify` runs unit/integration tests and the Bun build. It does not run the real-chain eval or native plugin build.

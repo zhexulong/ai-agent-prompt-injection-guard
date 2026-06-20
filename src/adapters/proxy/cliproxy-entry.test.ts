@@ -66,5 +66,5 @@ test("response body rewrite handles plain text fallback", async () => {
     config,
   );
 
-  expect(out.toString("utf8")).toBe("hello  world");
+  expect(Buffer.from(out).toString("utf8")).toBe("hello  world");
 });

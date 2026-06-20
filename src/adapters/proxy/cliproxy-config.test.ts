@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import YAML from "yaml";
 import {
   buildCliProxyRuntimeEnv,
   cliProxyExecutableName,
@@ -16,6 +17,10 @@ const guard = {
   alertLimit: 100,
   notifyLevel: NotifyLevel.Always,
 };
+
+function parseYaml(text: string): any {
+  return YAML.parse(text);
+}
 
 test("patchCliProxyConfig adds api keys, upstreams, claude key, and plugin config", () => {
   const original = [
@@ -35,21 +40,44 @@ test("patchCliProxyConfig adds api keys, upstreams, claude key, and plugin confi
     openaiModel: "aipig-capture",
   });
 
-  expect(patched).toContain('- "client-key"');
-  expect(patched).toContain('- "claude-key"');
-  expect(patched).toContain('name: "aipig-eval-upstream"');
-  expect(patched).toContain('base-url: "http://127.0.0.1:9123/v1"');
-  expect(patched).toContain('api-key: "claude-key"');
-  expect(patched).toContain('dir: "/opt/cliproxyapi/plugins"');
-  expect(patched).toContain("cliproxy-aipig:");
-  expect(patched).toContain("priority: 1");
+  const yaml = parseYaml(patched);
+  expect(yaml["api-keys"]).toContain("client-key");
+  expect(yaml["api-keys"]).toContain("claude-key");
+  expect(yaml["openai-compatibility"][0].name).toBe("aipig-eval-upstream");
+  expect(yaml["openai-compatibility"][0]["base-url"]).toBe("http://127.0.0.1:9123/v1");
+  expect(yaml["claude-api-key"][0]["api-key"]).toBe("claude-key");
+  expect(yaml.plugins.dir).toBe("/opt/cliproxyapi/plugins");
+  expect(yaml.plugins.configs["cliproxy-aipig"].priority).toBe(1);
+});
+
+test("patchCliProxyConfig creates missing top-level sections with YAML semantics", () => {
+  const original = [
+    "# minimal CPA config",
+    "host: 127.0.0.1",
+    "port: 8317",
+  ].join("\n");
+
+  const patched = patchCliProxyConfig(original, {
+    cpaRoot: "/opt/cliproxyapi",
+    cpaPort: 8317,
+    upstreamPort: 9123,
+    pluginName: "cliproxy-aipig",
+    openaiClientKey: "client-key",
+    claudeClientKey: "claude-key",
+    openaiModel: "aipig-capture",
+  });
+
+  expect(patched).toContain("api-keys:");
+  expect(patched).toContain("openai-compatibility:");
+  expect(patched).toContain("claude-api-key:");
+  expect(patched).toContain("plugins:");
+  expect(patched).toContain("host: 127.0.0.1");
 });
 
 test("patchCliProxyPluginConfig only installs the plugin section", () => {
   const original = [
-    "api-keys:",
-    "openai-compatibility:",
-    "claude-api-key:",
+    "# minimal CPA config",
+    "port: 8317",
   ].join("\n");
 
   const patched = patchCliProxyPluginConfig(original, {
@@ -58,8 +86,9 @@ test("patchCliProxyPluginConfig only installs the plugin section", () => {
   });
 
   expect(patched).toContain("plugins:");
-  expect(patched).toContain('dir: "/opt/cliproxyapi/plugins"');
-  expect(patched).toContain("cliproxy-aipig:");
+  const yaml = parseYaml(patched);
+  expect(yaml.plugins.dir).toBe("/opt/cliproxyapi/plugins");
+  expect(yaml.plugins.configs["cliproxy-aipig"].enabled).toBe(true);
   expect(patched).not.toContain("aipig-eval-upstream");
   expect(patched).not.toContain("aipig-eval-client-key");
 });
@@ -89,10 +118,11 @@ test("patchCliProxyConfig appends plugin config to an existing plugins section",
     openaiModel: "aipig-capture",
   });
 
-  expect(patched).toContain("    other-plugin:");
-  expect(patched).toContain("    cliproxy-aipig:");
-  expect(patched).toContain('dir: "/tmp/plugins"');
-  expect(patched).toContain("server:");
+  const yaml = parseYaml(patched);
+  expect(yaml.plugins.configs["other-plugin"].enabled).toBe(true);
+  expect(yaml.plugins.configs["cliproxy-aipig"].priority).toBe(1);
+  expect(yaml.plugins.dir).toBe("/tmp/plugins");
+  expect(yaml.server.port).toBe(8317);
 });
 
 test("buildCliProxyRuntimeEnv exports guard config paths for the native bridge", () => {

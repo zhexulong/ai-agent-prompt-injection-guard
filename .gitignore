@@ -3,4 +3,8 @@ dist/
 alerts.jsonl
 pending-suggestions.json
 eval/fixtures/private-real-history/
+report/
+eval/cliproxy-real-config-eval.ts
+eval/existing-cliproxyapi-hosts-eval.ts
+eval/existing-cliproxyapi-real-eval.ts
 .DS_Store

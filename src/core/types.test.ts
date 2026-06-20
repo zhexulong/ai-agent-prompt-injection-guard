@@ -12,10 +12,10 @@ import {
 } from "./types";
 
 test("enum values stay stable", () => {
-  expect(Confidence.High).toBe("high");
-  expect(Threat.ToolInjection).toBe("tool_injection");
-  expect(Action.FlaggedUnhandled).toBe("flagged_unhandled");
-  expect(NotifyLevel.First).toBe("first");
+  expect(String(Confidence.High)).toBe("high");
+  expect(String(Threat.ToolInjection)).toBe("tool_injection");
+  expect(String(Action.FlaggedUnhandled)).toBe("flagged_unhandled");
+  expect(String(NotifyLevel.First)).toBe("first");
 });
 
 test("key contracts are constructible", () => {

@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import YAML from "yaml";
 import type { GuardConfig } from "../../config";
 
 export interface CliProxyPatchOptions {
@@ -63,47 +64,38 @@ export function cliproxyPluginArtifactName(
 }
 
 export function patchCliProxyConfig(original: string, options: CliProxyPatchOptions): string {
-  let text = original;
+  const config = parseYamlConfig(original);
+  const apiKeys = arrayAt(config, "api-keys");
+  pushUniqueScalar(apiKeys, options.openaiClientKey);
+  pushUniqueScalar(apiKeys, options.claudeClientKey);
 
-  if (!containsYamlScalar(text, options.openaiClientKey)) {
-    text = insertIntoTopLevelList(text, "api-keys", `  - ${yamlQuote(options.openaiClientKey)}`);
-  }
-  if (!containsYamlScalar(text, options.claudeClientKey)) {
-    text = insertIntoTopLevelList(text, "api-keys", `  - ${yamlQuote(options.claudeClientKey)}`);
-  }
+  const openaiCompatibility = arrayAt(config, "openai-compatibility");
+  pushUniqueBy(openaiCompatibility, "name", "aipig-eval-upstream", {
+    name: "aipig-eval-upstream",
+    "base-url": `http://127.0.0.1:${options.upstreamPort}/v1`,
+    "api-key-entries": [{ "api-key": options.upstreamApiKey ?? "aipig-eval-upstream-key" }],
+    models: [{ name: options.openaiModel, alias: options.openaiModel }],
+  });
 
-  const openaiBlock = [
-    `  - name: ${yamlQuote("aipig-eval-upstream")}`,
-    `    base-url: ${yamlQuote(`http://127.0.0.1:${options.upstreamPort}/v1`)}`,
-    "    api-key-entries:",
-    `      - api-key: ${yamlQuote(options.upstreamApiKey ?? "aipig-eval-upstream-key")}`,
-    "    models:",
-    `      - name: ${yamlQuote(options.openaiModel)}`,
-    `        alias: ${yamlQuote(options.openaiModel)}`,
-  ].join("\n");
-  if (!text.includes("name: \"aipig-eval-upstream\"") && !text.includes("name: aipig-eval-upstream")) {
-    text = insertIntoTopLevelList(text, "openai-compatibility", openaiBlock);
-  }
+  const claudeKeys = arrayAt(config, "claude-api-key");
+  pushUniqueBy(claudeKeys, "api-key", options.claudeClientKey, {
+    "api-key": options.claudeClientKey,
+    priority: 100,
+    "base-url": `http://127.0.0.1:${options.upstreamPort}`,
+    "proxy-url": "",
+    models: [],
+  });
 
-  const claudeBlock = [
-    `  - api-key: ${yamlQuote(options.claudeClientKey)}`,
-    "    priority: 100",
-    `    base-url: ${yamlQuote(`http://127.0.0.1:${options.upstreamPort}`)}`,
-    `    proxy-url: ${yamlQuote("")}`,
-    "    models: []",
-  ].join("\n");
-  if (!text.includes(`api-key: "${options.claudeClientKey}"`) && !text.includes(`api-key: ${options.claudeClientKey}`)) {
-    text = insertIntoTopLevelList(text, "claude-api-key", claudeBlock);
-  }
-
-  return ensurePluginConfig(text, options);
+  ensurePluginConfig(config, options);
+  return stringifyYamlConfig(config);
 }
 
 export function patchCliProxyPluginConfig(
   original: string,
   options: Pick<CliProxyPatchOptions, "cpaRoot" | "pluginName">,
 ): string {
-  return ensurePluginConfig(original, {
+  const config = parseYamlConfig(original);
+  ensurePluginConfig(config, {
     ...options,
     cpaPort: 8317,
     upstreamPort: 0,
@@ -111,6 +103,7 @@ export function patchCliProxyPluginConfig(
     claudeClientKey: "",
     openaiModel: "",
   });
+  return stringifyYamlConfig(config);
 }
 
 export function buildCliProxyRuntimeEnv(options: CliProxyRuntimeEnvOptions): Record<string, string> {
@@ -133,82 +126,48 @@ export function buildCliProxyRuntimeEnv(options: CliProxyRuntimeEnvOptions): Rec
   };
 }
 
-function insertIntoTopLevelList(text: string, key: string, block: string): string {
-  const lines = text.split("\n");
-  const start = lines.findIndex((line) => line.trim() === `${key}:`);
-  if (start < 0) throw new Error(`missing top-level ${key}: section`);
-
-  let end = lines.length;
-  for (let i = start + 1; i < lines.length; i++) {
-    if (/^[A-Za-z0-9_-][A-Za-z0-9_-]*:/.test(lines[i])) {
-      end = i;
-      break;
-    }
-  }
-  lines.splice(end, 0, ...block.split("\n"));
-  return lines.join("\n");
-}
-
-function ensurePluginConfig(text: string, options: CliProxyPatchOptions): string {
+function ensurePluginConfig(config: Record<string, any>, options: CliProxyPatchOptions): void {
   const pluginDir = join(options.cpaRoot, "plugins").replaceAll("\\", "/");
-  const pluginBlock = [
-    "plugins:",
-    "  enabled: true",
-    `  dir: ${yamlQuote(pluginDir)}`,
-    "  configs:",
-    `    ${options.pluginName}:`,
-    "      enabled: true",
-    "      priority: 1",
-  ].join("\n");
-
-  if (!/^plugins:\s*$/m.test(text)) {
-    return `${text.replace(/\s*$/, "")}\n${pluginBlock}\n`;
-  }
-  if (text.includes(`${options.pluginName}:`)) return text;
-
-  const lines = text.split("\n");
-  const pluginsStart = lines.findIndex((line) => line.trim() === "plugins:");
-  const pluginsEnd = findSectionEnd(lines, pluginsStart);
-  const configsIndex = findNestedKey(lines, pluginsStart, pluginsEnd, 2, "configs");
-
-  if (configsIndex >= 0) {
-    lines.splice(configsIndex + 1, 0, `    ${options.pluginName}:`, "      enabled: true", "      priority: 1");
-    return lines.join("\n");
-  }
-
-  lines.splice(pluginsEnd, 0, "  configs:", `    ${options.pluginName}:`, "      enabled: true", "      priority: 1");
-  if (!lines.slice(pluginsStart, pluginsEnd).some((line) => line.trim().startsWith("dir:"))) {
-    lines.splice(pluginsStart + 1, 0, `  dir: ${yamlQuote(pluginDir)}`);
-  }
-  if (!lines.slice(pluginsStart, pluginsEnd).some((line) => line.trim().startsWith("enabled:"))) {
-    lines.splice(pluginsStart + 1, 0, "  enabled: true");
-  }
-  return lines.join("\n");
+  const plugins = objectAt(config, "plugins");
+  if (plugins.enabled === undefined) plugins.enabled = true;
+  if (plugins.dir === undefined) plugins.dir = pluginDir;
+  const pluginConfigs = objectAt(plugins, "configs");
+  pluginConfigs[options.pluginName] = {
+    enabled: true,
+    priority: 1,
+    ...(isPlainObject(pluginConfigs[options.pluginName]) ? pluginConfigs[options.pluginName] : {}),
+  };
 }
 
-function findSectionEnd(lines: string[], start: number): number {
-  for (let i = start + 1; i < lines.length; i++) {
-    if (/^[A-Za-z0-9_-][A-Za-z0-9_-]*:/.test(lines[i])) return i;
-  }
-  return lines.length;
+function parseYamlConfig(text: string): Record<string, any> {
+  const parsed = YAML.parse(text || "{}");
+  if (parsed === null || parsed === undefined) return {};
+  if (!isPlainObject(parsed)) throw new Error("CLIProxyAPI config root must be a YAML mapping");
+  return parsed;
 }
 
-function findNestedKey(lines: string[], start: number, end: number, spaces: number, key: string): number {
-  const prefix = " ".repeat(spaces);
-  for (let i = start + 1; i < end; i++) {
-    if (lines[i].startsWith(prefix) && lines[i].trim() === `${key}:`) return i;
-  }
-  return -1;
+function stringifyYamlConfig(config: Record<string, any>): string {
+  return YAML.stringify(config, { lineWidth: 0 });
 }
 
-function containsYamlScalar(text: string, value: string): boolean {
-  return text.includes(yamlQuote(value)) || new RegExp(`(^|\\s)${escapeRegExp(value)}($|\\s)`).test(text);
+function arrayAt(config: Record<string, any>, key: string): any[] {
+  if (!Array.isArray(config[key])) config[key] = [];
+  return config[key];
 }
 
-function yamlQuote(value: string): string {
-  return JSON.stringify(value);
+function objectAt(config: Record<string, any>, key: string): Record<string, any> {
+  if (!isPlainObject(config[key])) config[key] = {};
+  return config[key];
 }
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+function pushUniqueScalar(items: any[], value: string): void {
+  if (!items.includes(value)) items.push(value);
+}
+
+function pushUniqueBy(items: any[], key: string, value: string, item: Record<string, any>): void {
+  if (!items.some((existing) => isPlainObject(existing) && existing[key] === value)) items.push(item);
+}
+
+function isPlainObject(value: unknown): value is Record<string, any> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }

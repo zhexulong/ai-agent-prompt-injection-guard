@@ -113,7 +113,7 @@ test("Tier 1 suggestions are written to pending when no synchronous confirmation
       alertsPath: "/tmp/aipig-engine-alerts-3.jsonl",
       pendingSuggestionsPath: "/tmp/aipig-engine-pending-3.json",
       notifySeen: new Set<string>(),
-      judge: { baseUrl: "https://example.invalid", apiKey: "k", model: "m", fetchImpl: fetchImpl as typeof fetch },
+      judge: { baseUrl: "https://example.invalid", apiKey: "k", model: "m", fetchImpl: fetchImpl as unknown as typeof fetch },
     },
   );
 

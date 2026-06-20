@@ -123,7 +123,7 @@ function pluginRegistration() {
       Name: "ai-agent-prompt-injection-guard",
       Version: "0.1.0",
       Author: "ai-agent-prompt-injection-guard",
-      GitHubRepository: "https://example.invalid/ai-agent-prompt-injection-guard",
+      GitHubRepository: "https://github.com/zhexulong/ai-agent-prompt-injection-guard",
       Logo: "",
       ConfigFields: [],
     },

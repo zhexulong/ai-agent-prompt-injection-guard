@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { parse as parseJsonc, printParseErrorCode, type ParseError } from "jsonc-parser";
 import { NotifyLevel } from "./core/types";
 import type { JudgeConfig } from "./llm/judge";
 
@@ -172,42 +173,13 @@ function findOpencodeDir(startDir: string): string | undefined {
 
 function loadConfigFile(path: string): Partial<AipigConfig> {
   const raw = readFileSync(path, "utf8");
-  return JSON.parse(stripJsonCommentsAndTrailingCommas(raw));
-}
-
-function stripJsonCommentsAndTrailingCommas(text: string): string {
-  let out = "";
-  let inString = false;
-  let escaped = false;
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    const next = text[i + 1];
-    if (inString) {
-      out += ch;
-      if (escaped) escaped = false;
-      else if (ch === "\\") escaped = true;
-      else if (ch === "\"") inString = false;
-      continue;
-    }
-    if (ch === "\"") {
-      inString = true;
-      out += ch;
-      continue;
-    }
-    if (ch === "/" && next === "/") {
-      while (i < text.length && text[i] !== "\n") i++;
-      out += "\n";
-      continue;
-    }
-    if (ch === "/" && next === "*") {
-      i += 2;
-      while (i < text.length && !(text[i] === "*" && text[i + 1] === "/")) i++;
-      i++;
-      continue;
-    }
-    out += ch;
+  const errors: ParseError[] = [];
+  const parsed = parseJsonc(raw, errors, { allowTrailingComma: true, disallowComments: false });
+  if (errors.length > 0) {
+    const first = errors[0];
+    throw new Error(`invalid AIPIG config ${path}: ${printParseErrorCode(first.error)} at offset ${first.offset}`);
   }
-  return out.replace(/,\s*([}\]])/g, "$1");
+  return parsed ?? {};
 }
 
 function mergeConfig(base: AipigConfig, override: Partial<AipigConfig>): AipigConfig {
