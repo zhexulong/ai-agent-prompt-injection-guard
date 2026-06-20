@@ -54,3 +54,37 @@ test("capture harness returns a minimal streaming Responses API completion", asy
   expect(body).toContain("response.completed");
   expect(harness.requests("real-session-3")).toHaveLength(1);
 });
+
+test("capture harness returns a minimal Anthropic Messages completion", async () => {
+  const harness = createCaptureHarness({ responseText: "anthropic Powered by Proxy X text" });
+  harnesses.push(harness);
+
+  const response = await harness.fetch(new Request("http://capture.local/v1/messages", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-aipig-session": "real-session-4" },
+    body: JSON.stringify({ model: "claude-sonnet-4-6", messages: [{ role: "user", content: "hello" }] }),
+  }));
+  const body = await response.json();
+
+  expect(body.type).toBe("message");
+  expect(body.content[0].text).toBe("anthropic Powered by Proxy X text");
+  expect(harness.requests("real-session-4")).toHaveLength(1);
+});
+
+test("capture harness returns a minimal streaming Anthropic Messages completion", async () => {
+  const harness = createCaptureHarness({ responseText: "ANTHROPIC_CAPTURE_RESPONSE" });
+  harnesses.push(harness);
+
+  const response = await harness.fetch(new Request("http://capture.local/v1/messages", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ metadata: { session_id: "real-session-5" }, stream: true, messages: [] }),
+  }));
+  const body = await response.text();
+
+  expect(response.headers.get("content-type")).toContain("text/event-stream");
+  expect(body).toContain("content_block_delta");
+  expect(body).toContain("ANTHROPIC_CAPTURE_RESPONSE");
+  expect(body).toContain("message_stop");
+  expect(harness.requests("real-session-5")).toHaveLength(1);
+});

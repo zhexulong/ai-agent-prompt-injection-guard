@@ -100,3 +100,40 @@ test("candidate counts do not cross sessions", () => {
   expect(observeCandidatePattern(tracker, { host: "claude", sessionId: "s1", channel: "response_text", pattern: "Powered by Proxy X" })).toBeNull();
   expect(observeCandidatePattern(tracker, { host: "claude", sessionId: "s2", channel: "response_text", pattern: "Powered by Proxy X" })).toBeNull();
 });
+
+test("powered by is too weak to generalize across unrelated brands", () => {
+  const tracker = createCandidateTracker();
+  expect(observeCandidatePattern(tracker, { host: "proxy", sessionId: "s1", channel: "response_text", pattern: "Powered by PostgreSQL", observationId: "record-1" })).toBeNull();
+  expect(observeCandidatePattern(tracker, { host: "proxy", sessionId: "s1", channel: "response_text", pattern: "Powered by OpenAI", observationId: "record-2" })).toBeNull();
+  expect(observeCandidatePattern(tracker, { host: "proxy", sessionId: "s1", channel: "response_text", pattern: "Powered by Next.js", observationId: "record-3" })).toBeNull();
+});
+
+test("powered by can suggest a narrow brand-specific fingerprint", () => {
+  const tracker = createCandidateTracker();
+  expect(observeCandidatePattern(tracker, { host: "proxy", sessionId: "s1", channel: "response_text", pattern: "Powered by ABCD", observationId: "record-1" })).toBeNull();
+  expect(observeCandidatePattern(tracker, { host: "proxy", sessionId: "s1", channel: "response_text", pattern: "Powered by ABCD", observationId: "record-2" })).toBeNull();
+  const suggestion = observeCandidatePattern(tracker, { host: "proxy", sessionId: "s1", channel: "response_text", pattern: "Powered by ABCD", observationId: "record-3" });
+  expect(suggestion?.pattern.pattern).toBe("Powered\\s+by\\s+ABCD");
+});
+
+test("powered by variants can suggest a brand-bounded fingerprint", () => {
+  const tracker = createCandidateTracker();
+  expect(observeCandidatePattern(tracker, { host: "proxy", sessionId: "s1", channel: "response_text", pattern: "Powered by SampleSite", observationId: "record-1" })).toBeNull();
+  expect(observeCandidatePattern(tracker, { host: "proxy", sessionId: "s1", channel: "response_text", pattern: "Powered by samplesite", observationId: "record-2" })).toBeNull();
+  const suggestion = observeCandidatePattern(tracker, { host: "proxy", sessionId: "s1", channel: "response_text", pattern: "Powered by SAMPLESITE", observationId: "record-3" });
+  expect(suggestion?.pattern.type).toBe("regex");
+  expect(suggestion?.pattern.pattern).toBe("Powered\\s+by\\s+(?:SampleSite|samplesite|SAMPLESITE)");
+  expect(new RegExp(suggestion!.pattern.pattern).test("Powered by samplesite")).toBe(true);
+  expect(new RegExp(suggestion!.pattern.pattern).test("Powered by PostgreSQL")).toBe(false);
+});
+
+test("long repeated templates become precise regexes without trailing wildcard", () => {
+  const fp = buildFormatFingerprint([
+    "This response was distributed by ABCD site for evaluation only please do not share ref 1001 end",
+    "This response was distributed by ABCD site for evaluation only please do not share ref 1002 end",
+    "This response was distributed by ABCD site for evaluation only please do not share ref 1003 end",
+  ]);
+  expect(fp.pattern).toBe("This\\s+response\\s+was\\s+distributed\\s+by\\s+ABCD\\s+site\\s+for\\s+evaluation\\s+only\\s+please\\s+do\\s+not\\s+share\\s+ref\\s+\\d{3,}\\s+end");
+  expect(fp.pattern.endsWith(".*")).toBe(false);
+  expect(fp.pattern.endsWith("\\S{1,80}")).toBe(false);
+});

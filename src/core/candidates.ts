@@ -196,6 +196,8 @@ function regexFromTokens(tokens: TemplateToken[]): string | null {
   const slots = tokens.filter((token) => token.kind === "slot");
   if (slots.length > 4 || slots.length > Math.ceil(tokens.length * 0.4)) return null;
   if (tokens[0]?.kind !== "constant" && tokens[0]?.slotKind !== "compact") return null;
+  const weakAttributionRegex = weakAttributionBrandRegex(tokens);
+  if (weakAttributionRegex !== undefined) return weakAttributionRegex;
   return tokens.map((token) => token.kind === "constant" ? escapeRegex(token.value) : token.regex ?? "\\S{1,80}").join("\\s+");
 }
 
@@ -253,6 +255,57 @@ function variableSlotSummary(tokens: TemplateToken[]): string[] {
   return tokens
     .map((token, index) => token.kind === "slot" ? `${index}:${token.slotKind ?? "word"}:${token.regex ?? "\\S{1,80}"}` : null)
     .filter((x): x is string => Boolean(x));
+}
+
+const weakAttributionTokens = new Set([
+  "powered",
+  "by",
+  "provided",
+  "via",
+  "from",
+  "source",
+  "generated",
+  "served",
+]);
+
+function hasOnlyWeakAttributionAnchor(tokens: TemplateToken[]): boolean {
+  const hasVariableWordSlot = tokens.some((token) => token.kind === "slot" && token.slotKind === "word");
+  if (!hasVariableWordSlot) return false;
+
+  const constants = tokens
+    .filter((token) => token.kind === "constant")
+    .map((token) => token.value.toLowerCase());
+  if (constants.length === 0) return false;
+
+  return constants.every((token) => weakAttributionTokens.has(token));
+}
+
+function canonicalBrandValue(value: string): string {
+  return value
+    .normalize("NFKC")
+    .replace(/(?:站点|site)$/i, "")
+    .replace(/[^a-z0-9\u3400-\u9fff]+/gi, "")
+    .toLowerCase();
+}
+
+function weakAttributionBrandRegex(tokens: TemplateToken[]): string | null | undefined {
+  if (!hasOnlyWeakAttributionAnchor(tokens)) return undefined;
+
+  const wordSlots = tokens.filter((token) => token.kind === "slot" && token.slotKind === "word");
+  if (wordSlots.length !== 1) return null;
+
+  const slot = wordSlots[0];
+  const canonicalValues = [...new Set(slot.values.map(canonicalBrandValue).filter(Boolean))];
+  if (canonicalValues.length !== 1 || canonicalValues[0].length < 3) return null;
+
+  const variants = [...new Set(slot.values)].sort((a, b) => b.length - a.length);
+  const variantRegex = variants.length === 1
+    ? escapeRegex(variants[0])
+    : `(?:${variants.map(escapeRegex).join("|")})`;
+  return tokens.map((token) => {
+    if (token === slot) return variantRegex;
+    return token.kind === "constant" ? escapeRegex(token.value) : token.regex ?? "\\S{1,80}";
+  }).join("\\s+");
 }
 
 export function buildFormatFingerprint(patterns: string | string[]) {

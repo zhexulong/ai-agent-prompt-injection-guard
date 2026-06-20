@@ -42,6 +42,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"time"
 	"unsafe"
 )
@@ -104,10 +105,7 @@ func runTypeScriptEntry(method string, payload []byte) ([]byte, error) {
 	if entry == "" {
 		entry = "src/adapters/proxy/cliproxy-entry.ts"
 	}
-	bun := os.Getenv("AIPIG_CLIPROXY_BUN")
-	if bun == "" {
-		bun = "bun"
-	}
+	bun := resolveBunExecutable()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -131,6 +129,37 @@ func runTypeScriptEntry(method string, payload []byte) ([]byte, error) {
 		return nil, err
 	}
 	return out, nil
+}
+
+func resolveBunExecutable() string {
+	candidates := []string{}
+	if configured := os.Getenv("AIPIG_CLIPROXY_BUN"); configured != "" {
+		candidates = append(candidates, configured)
+	}
+	if path, err := exec.LookPath("bun"); err == nil {
+		candidates = append(candidates, path)
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		candidates = append(candidates, filepath.Join(home, ".bun", "bin", "bun"))
+	}
+	candidates = append(candidates, "/usr/local/bin/bun", "/opt/homebrew/bin/bun")
+
+	for _, candidate := range candidates {
+		if candidate == "" {
+			continue
+		}
+		if !filepath.IsAbs(candidate) {
+			if path, err := exec.LookPath(candidate); err == nil {
+				return path
+			}
+			continue
+		}
+		if stat, err := os.Stat(candidate); err == nil && !stat.IsDir() {
+			return candidate
+		}
+	}
+
+	return "bun"
 }
 
 func writeResponse(response *C.cliproxy_buffer, raw []byte) {

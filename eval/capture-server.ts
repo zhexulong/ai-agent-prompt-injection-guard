@@ -118,6 +118,43 @@ function responsesApiResponse(content: string, stream: boolean): Response {
   });
 }
 
+function anthropicMessageBody(content: string) {
+  return {
+    id: "msg_aipig_capture",
+    type: "message",
+    role: "assistant",
+    model: "aipig-capture",
+    content: [{ type: "text", text: content }],
+    stop_reason: "end_turn",
+    stop_sequence: null,
+    usage: {
+      input_tokens: 1,
+      output_tokens: 1,
+    },
+  };
+}
+
+function anthropicMessagesResponse(content: string, stream: boolean): Response {
+  const message = anthropicMessageBody(content);
+  if (!stream) return Response.json(message);
+
+  const events = [
+    { event: "message_start", data: { type: "message_start", message: { ...message, content: [], stop_reason: null, stop_sequence: null } } },
+    { event: "content_block_start", data: { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } } },
+    { event: "content_block_delta", data: { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: content } } },
+    { event: "content_block_stop", data: { type: "content_block_stop", index: 0 } },
+    { event: "message_delta", data: { type: "message_delta", delta: { stop_reason: "end_turn", stop_sequence: null }, usage: { output_tokens: 1 } } },
+    { event: "message_stop", data: { type: "message_stop" } },
+  ];
+  const body = events.map(({ event, data }) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`).join("");
+  return new Response(body, {
+    headers: {
+      "content-type": "text/event-stream",
+      "cache-control": "no-cache",
+    },
+  });
+}
+
 export function createCaptureHarness(options: CaptureServerOptions = {}) {
   const captured: CapturedRequest[] = [];
   const responseText = options.responseText ?? "capture response";
@@ -158,6 +195,7 @@ export function createCaptureHarness(options: CaptureServerOptions = {}) {
 
       if (url.pathname.endsWith("/chat/completions")) return chatCompletionResponse(responseText, Boolean((json as any)?.stream));
       if (url.pathname.endsWith("/responses")) return responsesApiResponse(responseText, Boolean((json as any)?.stream));
+      if (url.pathname.endsWith("/messages")) return anthropicMessagesResponse(responseText, Boolean((json as any)?.stream));
       return Response.json({ ok: true });
     },
     requests(sessionId?: string): CapturedRequest[] {
