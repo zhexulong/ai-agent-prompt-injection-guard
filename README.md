@@ -2,7 +2,7 @@
 
 AIPIG is a local guard for AI-agent prompt-injection banners, proxy-added response text, suspicious tool-result text, and token-padding artifacts.
 
-The main supported deployment path is a CLIProxyAPI response interceptor. When Claude Code, OpenCode, or Codex talks through CLIProxyAPI, AIPIG can remove known injected response text before the client stores it and before the next model request reads it back.
+The main supported deployment path is a CLIProxyAPI plugin. When Claude Code, OpenCode, or Codex talks through CLIProxyAPI, AIPIG can remove known injected response text before the client stores it, and can remove known injected tool-result text from upstream model requests before the model reads it.
 
 ## What It Does
 
@@ -34,6 +34,8 @@ Create a config file:
 ```bash
 npx aipig init --config .opencode/aipig.jsonc
 ```
+
+This also creates a default `fingerprints.json` in the current project if one does not already exist.
 
 Edit `.opencode/aipig.jsonc` and set:
 
@@ -87,12 +89,22 @@ npx aipig cliproxy restore --config .opencode/aipig.jsonc --backup /path/to/conf
 
 AIPIG expects a CLIProxyAPI build with:
 
+- CLIProxyAPI `7.0.0` or newer
 - plugin support enabled through `config.yaml`
 - a `plugins/` directory under the CPA root
 - hot reload after `config.yaml` changes
 - `GET /healthz` on the configured local port
+- plugin request, response, and response-stream interceptors
 
+`aipig cliproxy doctor` reads `version.txt` under the CPA root and fails for unsupported major versions.
 The installer patches only the plugin configuration block for `cliproxy-aipig`, writes a timestamped backup beside `config.yaml`, and does not restart CPA.
+
+| CLIProxyAPI version | Status | Notes |
+| --- | --- | --- |
+| `7.2.22` | Verified | Local Linux real-chain install, hot reload, response rewrite, and request tool-result rewrite tests pass. |
+| `>= 7.0.0` | Supported | Expected to work when the build exposes `request_interceptor`, `response_interceptor`, and `response_stream_interceptor`. |
+| `< 7.0.0` | Unsupported | `doctor` fails; these builds are outside the v7 plugin host contract AIPIG uses. |
+| Missing `version.txt` | Not release-ready | Fix the CPA install or verify the build manually before relying on proxy mode. |
 
 ## Config Files
 
@@ -134,11 +146,11 @@ Windows real-chain verification is not complete yet. The install paths are imple
 
 | Tool | Path | Response Text Injection | Tool Result Injection | User View | Next AI Turn | Evidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| Claude Code | CLIProxyAPI | Removed before Claude stores it | Not covered on the proxy path yet | Injected banners are stripped from responses | Cleaned response text is carried forward | [matrix](eval/reports/anti-injection-matrix.md#claude-proxy) |
+| Claude Code | CLIProxyAPI | Removed before Claude stores it | Removed from upstream tool-result request bodies | Injected banners are stripped from responses; tool-result cleanup is model-facing | Cleaned response and tool-result text are carried forward | [matrix](eval/reports/anti-injection-matrix.md#claude-proxy) |
 | Claude Code | Direct hooks | Can be hidden from display only | Removed before Claude reads tool output | Tool-output injections are removed; response banners may only be hidden on screen | Tool results are cleaned; response text may still remain in host context | [matrix](eval/reports/anti-injection-matrix.md#claude-direct) |
-| OpenCode | CLIProxyAPI | Removed before OpenCode stores it | Not covered on the proxy path yet | Injected banners are stripped from responses | Cleaned response text is carried forward | [matrix](eval/reports/anti-injection-matrix.md#opencode-proxy) |
+| OpenCode | CLIProxyAPI | Removed before OpenCode stores it | Removed from upstream tool-result request bodies | Injected banners are stripped from responses; tool-result cleanup is model-facing | Cleaned response and tool-result text are carried forward | [matrix](eval/reports/anti-injection-matrix.md#opencode-proxy) |
 | OpenCode | Direct plugin | Removed by the plugin | Removed by the plugin | Injected response and tool-result text are removed | Cleaned content is sent onward | [matrix](eval/reports/anti-injection-matrix.md#opencode-direct) |
-| Codex | CLIProxyAPI | Removed before Codex receives it | Not covered on the proxy path yet | Injected banners are stripped from responses | Cleaned response text is carried forward | [matrix](eval/reports/anti-injection-matrix.md#codex-proxy) |
+| Codex | CLIProxyAPI | Removed before Codex receives it | Removed from upstream tool-result request bodies | Injected banners are stripped from responses; tool-result cleanup is model-facing | Cleaned response and tool-result text are carried forward | [matrix](eval/reports/anti-injection-matrix.md#codex-proxy) |
 | Codex | Direct hooks | Alert only; Codex cannot rewrite assistant responses here | Replaced for the model with hook feedback | Response banners can still appear; tool-result replacements are surfaced through hook feedback | Response banners may remain; tool results are cleaned | [matrix](eval/reports/anti-injection-matrix.md#codex-direct) |
 
 Usage-only token padding is not rewritten. It is logged and surfaced as an alert.

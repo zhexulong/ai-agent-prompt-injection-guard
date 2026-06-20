@@ -21,6 +21,7 @@ function seedCpa(root: string) {
   mkdirSync(cpaRoot, { recursive: true });
   writeFileSync(join(cpaRoot, "cli-proxy-api"), "");
   writeFileSync(join(cpaRoot, "config.yaml"), "port: 8317\nplugins:\n  enabled: true\n  configs:\n    other:\n      enabled: true\n");
+  writeFileSync(join(cpaRoot, "version.txt"), "7.2.22\n");
   return cpaRoot;
 }
 
@@ -33,6 +34,7 @@ test("parseAipigArgs supports top-level and cliproxy subcommands", () => {
 test("init creates an editable config without overwriting by default", async () => {
   const root = tempRoot("aipig-cli-init");
   const configPath = join(root, ".opencode", "aipig.jsonc");
+  const fingerprintsPath = join(root, "fingerprints.json");
 
   const first = await runAipigCli(["init", "--config", configPath], { cwd: root });
   const second = await runAipigCli(["init", "--config", configPath], { cwd: root });
@@ -40,6 +42,7 @@ test("init creates an editable config without overwriting by default", async () 
   expect(first.status).toBe(0);
   expect(second.status).toBe(1);
   expect(readFileSync(configPath, "utf8")).toContain("cliproxy");
+  expect(readFileSync(fingerprintsPath, "utf8")).toContain("positives");
 });
 
 test("cliproxy install writes backup and waits for hot reload without restarting", async () => {
@@ -85,6 +88,8 @@ test("cliproxy doctor prints human-readable checks by default", async () => {
 
   expect(result.status).toBe(0);
   expect(result.stdout).toContain("CLIProxyAPI doctor");
+  expect(result.stdout).toContain("[OK] CLIProxyAPI version: 7.2.22");
+  expect(result.stdout).toContain("minimum 7.0.0");
   expect(result.stdout).toContain("[OK] CLIProxyAPI config");
   expect(result.stdout).toContain("[WARN] Plugin installed");
   expect(result.stdout).toContain("Next: aipig cliproxy install --config");
@@ -104,10 +109,30 @@ test("cliproxy doctor keeps machine-readable JSON with --json", async () => {
   const payload = JSON.parse(result.stdout);
 
   expect(result.status).toBe(0);
+  expect(payload.cpaVersion).toBe("7.2.22");
+  expect(payload.support.minimumVersion).toBe("7.0.0");
+  expect(payload.support.status).toBe("supported");
   expect(payload.entryArtifact).toBe(join(root, "dist", "src", "adapters", "proxy", "cliproxy-entry.js"));
   expect(payload.entryTarget).toBe(join(cpaRoot, "plugins", "cliproxy-aipig-entry.js"));
   expect(payload.checks.pluginTargetExists).toBe(false);
   expect(payload.checks.entryTargetExists).toBe(false);
+});
+
+test("cliproxy doctor rejects unsupported CLIProxyAPI major versions", async () => {
+  const root = tempRoot("aipig-cli-doctor-unsupported-version");
+  const cpaRoot = seedCpa(root);
+  const configPath = join(root, "aipig.jsonc");
+  mkdirSync(join(root, "dist", "src", "adapters", "proxy"), { recursive: true });
+  writeFileSync(join(root, "dist", "cliproxy-aipig.so"), "plugin");
+  writeFileSync(join(root, "dist", "src", "adapters", "proxy", "cliproxy-entry.js"), "entry");
+  writeFileSync(join(cpaRoot, "version.txt"), "6.7.7\n");
+  writeFileSync(configPath, JSON.stringify({ cliproxy: { cpaRoot, port: 8317, pluginName: "cliproxy-aipig" } }));
+
+  const result = await runAipigCli(["cliproxy", "doctor", "--config", configPath], { cwd: root, repoRoot: root });
+
+  expect(result.status).toBe(1);
+  expect(result.stdout).toContain("[FAIL] CLIProxyAPI version: 6.7.7");
+  expect(result.stdout).toContain("AIPIG proxy mode requires CLIProxyAPI 7.0.0 or newer");
 });
 
 test("cliproxy install explains how to recover when plugin artifacts are missing", async () => {

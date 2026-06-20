@@ -9,6 +9,9 @@
 - Makes `aipig cliproxy doctor` human-readable by default while keeping `--json` for scripts.
 - Adds clearer install recovery messages when the CLIProxyAPI plugin artifacts have not been built.
 - Documents CLIProxyAPI compatibility expectations and common install recovery steps.
+- Adds CLIProxyAPI version support checks to `doctor`: v7+ is required, `7.2.22` is the current verified baseline, and v6 builds fail fast.
+- Adds CLIProxyAPI `request.intercept_before` handling for model-facing tool-result cleanup in upstream request bodies.
+- Makes `aipig init` create a default project `fingerprints.json` when one is missing, so proxy plugins can run immediately after install.
 
 ## v0.1.0 Source Release
 
@@ -22,4 +25,4 @@ Known limits:
 
 - This is a source release, not an npm package release.
 - Windows install paths are implemented but still need validation on a real Windows host.
-- Proxy tool-result injection coverage remains pending for the CLIProxyAPI path.
+- Real host tool-call eval remains pending for the CLIProxyAPI proxy tool-result path.

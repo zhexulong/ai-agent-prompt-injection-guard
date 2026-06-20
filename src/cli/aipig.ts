@@ -61,7 +61,7 @@ export async function runAipigCli(argv: string[], deps: AipigCliDeps = {}): Prom
     const cwd = deps.cwd ?? process.cwd();
     const repoRoot = deps.repoRoot ?? resolve(import.meta.dir, "../..");
 
-    if (args.command === "init") return initConfig(args, cwd);
+    if (args.command === "init") return initConfig(args, cwd, repoRoot);
     if (args.command === "doctor") return cliproxyDoctor(args, repoRoot);
     if (args.command === "build-plugin") return buildPlugin(deps);
     if (args.command === "cliproxy") return await cliproxy(args, repoRoot, cwd, deps.fetchImpl);
@@ -71,7 +71,7 @@ export async function runAipigCli(argv: string[], deps: AipigCliDeps = {}): Prom
   }
 }
 
-function initConfig(args: ParsedAipigArgs, cwd: string): AipigCliResult {
+function initConfig(args: ParsedAipigArgs, cwd: string, repoRoot: string): AipigCliResult {
   const configPath = resolve(cwd, args.config ?? ".opencode/aipig.jsonc");
   if (existsSync(configPath) && !args.force) return fail(`${configPath} already exists; pass --force to overwrite`);
   mkdirSync(dirname(configPath), { recursive: true });
@@ -92,7 +92,16 @@ function initConfig(args: ParsedAipigArgs, cwd: string): AipigCliResult {
     "",
   ].join("\n");
   writeFileSync(configPath, content);
+  ensureDefaultFingerprints(cwd, repoRoot);
   return ok(`created ${configPath}\n`);
+}
+
+function ensureDefaultFingerprints(cwd: string, repoRoot: string): void {
+  const target = resolve(cwd, "fingerprints.json");
+  if (existsSync(target)) return;
+  const source = join(repoRoot, "fingerprints.json");
+  const fallback = JSON.stringify({ positives: [], negatives: [] }, null, 2);
+  writeFileSync(target, existsSync(source) ? readFileSync(source, "utf8") : `${fallback}\n`);
 }
 
 async function buildPlugin(deps: AipigCliDeps): Promise<AipigCliResult> {
@@ -124,7 +133,8 @@ function cliproxyDoctor(args: ParsedAipigArgs, repoRoot: string): AipigCliResult
     && result.checks.cpaBinExists
     && result.checks.cpaConfigExists
     && result.checks.pluginArtifactExists
-    && result.checks.entryArtifactExists;
+    && result.checks.entryArtifactExists
+    && result.support.status === "supported";
   if (!args.json) {
     return {
       status: prerequisitesReady ? 0 : 1,
@@ -217,8 +227,11 @@ function cliproxyRestore(args: ParsedAipigArgs, repoRoot: string): AipigCliResul
 type CliProxyDoctorResult = ReturnType<typeof createCliProxyDoctorResult>;
 
 function createCliProxyDoctorResult(plan: ReturnType<typeof planFromArgs>) {
+  const cpaVersion = readCliProxyVersion(plan.cpaRoot);
   return {
     cpaRoot: plan.cpaRoot,
+    cpaVersion,
+    support: assessCliProxySupport(cpaVersion),
     cpaBin: plan.cpaBin,
     cpaConfig: plan.cpaConfig,
     pluginArtifact: plan.pluginArtifact,
@@ -241,6 +254,7 @@ function formatCliProxyDoctor(result: CliProxyDoctorResult, args: ParsedAipigArg
   const lines = [
     "CLIProxyAPI doctor",
     formatCheck(result.checks.cpaRootExists, "CLIProxyAPI root", result.cpaRoot),
+    formatVersionCheck(result),
     formatCheck(result.checks.cpaBinExists, "CLIProxyAPI binary", result.cpaBin),
     formatCheck(result.checks.cpaConfigExists, "CLIProxyAPI config", result.cpaConfig),
     formatCheck(result.checks.pluginArtifactExists, "Native plugin artifact", result.pluginArtifact),
@@ -259,6 +273,14 @@ function formatCliProxyDoctor(result: CliProxyDoctorResult, args: ParsedAipigArg
   return `${lines.join("\n")}\n`;
 }
 
+function formatVersionCheck(result: CliProxyDoctorResult): string {
+  const version = result.cpaVersion ?? "unknown";
+  const suffix = result.support.status === "supported"
+    ? `(supported; minimum ${result.support.minimumVersion}; verified ${result.support.verifiedVersion})`
+    : result.support.reason;
+  return `[${result.support.status === "supported" ? "OK" : "FAIL"}] CLIProxyAPI version: ${version} ${suffix}`;
+}
+
 function formatCheck(ok: boolean, label: string, path: string, missingLevel: "FAIL" | "WARN" = "FAIL"): string {
   return `[${ok ? "OK" : missingLevel}] ${label}: ${path}`;
 }
@@ -268,6 +290,41 @@ function readCliProxyConfig(plan: ReturnType<typeof planFromArgs>): string {
     throw new Error(`CLIProxyAPI config not found: ${plan.cpaConfig}. Check cliproxy.cpaRoot or AIPIG_CLIPROXY_CPA_ROOT.`);
   }
   return readFileSync(plan.cpaConfig, "utf8");
+}
+
+function readCliProxyVersion(cpaRoot: string): string | undefined {
+  const versionPath = join(cpaRoot, "version.txt");
+  if (!existsSync(versionPath)) return undefined;
+  const version = readFileSync(versionPath, "utf8").trim();
+  return version || undefined;
+}
+
+function assessCliProxySupport(version: string | undefined) {
+  const minimumVersion = "7.0.0";
+  const verifiedVersion = "7.2.22";
+  if (!version) {
+    return {
+      status: "unknown" as const,
+      minimumVersion,
+      verifiedVersion,
+      reason: `AIPIG proxy mode requires CLIProxyAPI ${minimumVersion} or newer with plugin request/response interceptors.`,
+    };
+  }
+  const major = Number(version.split(".")[0]);
+  if (!Number.isInteger(major) || major < 7) {
+    return {
+      status: "unsupported" as const,
+      minimumVersion,
+      verifiedVersion,
+      reason: `AIPIG proxy mode requires CLIProxyAPI ${minimumVersion} or newer with plugin request/response interceptors.`,
+    };
+  }
+  return {
+    status: "supported" as const,
+    minimumVersion,
+    verifiedVersion,
+    reason: "",
+  };
 }
 
 function assertInstallArtifactsExist(plan: ReturnType<typeof planFromArgs>): void {

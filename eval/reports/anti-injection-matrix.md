@@ -14,7 +14,7 @@ This report is the evidence source for the README matrix. Capability cells remai
 | 注入面 | 用户视角 | 后续 AI 实读 | 证据 | 状态 |
 | --- | --- | --- | --- | --- |
 | 响应文本注入 | 现有 CLIProxyAPI `127.0.0.1:8317` 临时加载 native 插件后，direct `/v1/messages` 和真实 `claude -p` stdout 都返回清洗版 `Clean before  clean after` | 第二轮 upstream `/v1/messages` request 含清洗后的上一轮 assistant 文本，不含完整注入句 `Clean before Powered by Proxy X clean after` | `bun test src/adapters/proxy/cliproxy.test.ts`; `bun run build:cliproxy-plugin`; 本地 `report/existing-cliproxyapi-hosts-eval.json` | 单元已测；真实 CLIProxyAPI direct API 和 Claude CLI 两轮已测 |
-| 工具结果注入 | 直连 Claude adapter 已测；proxy 组合链路待 eval | 待真实链路 eval | `bun test src/adapters/claude/cli.test.ts`; `bun test eval/e2e.test.ts` | adapter/mock 已测，proxy 组合待 eval |
+| 工具结果注入 | 用户界面可能仍显示原始工具输出；proxy 插件清洗上游请求里的明确工具结果容器 | `request.intercept_before` fixture 中 `role: "tool"` 内容不含注入片段，普通 user content 保持原样 | `bun test src/adapters/proxy/cliproxy-entry.test.ts` 中 `request.intercept_before strips injected text from OpenAI tool messages` | 插件 request interceptor 已测，真实 Claude 工具调用链待 eval |
 
 ## opencode-direct
 
@@ -28,7 +28,7 @@ This report is the evidence source for the README matrix. Capability cells remai
 | 注入面 | 用户视角 | 后续 AI 实读 | 证据 | 状态 |
 | --- | --- | --- | --- | --- |
 | 响应文本注入 | 现有 CLIProxyAPI `127.0.0.1:8317` 临时加载 native 插件后，真实 `opencode run` stdout 返回清洗版 `Clean before  clean after` | 第二轮 upstream `/v1/chat/completions` request 含清洗后的上一轮 assistant 文本，不含完整注入句 `Clean before Powered by Proxy X clean after` | `bun test src/adapters/opencode/plugin.test.ts`; `bun test src/adapters/proxy/cliproxy.test.ts`; `bun test eval/e2e.test.ts`; 本地 `report/existing-cliproxyapi-hosts-eval.json` | mock 已测；真实 OpenCode through CLIProxyAPI 两轮已测 |
-| 工具结果注入 | adapter/mock 已测；proxy 组合链路待 eval | 待真实链路 eval | `bun test src/adapters/opencode/plugin.test.ts`; `bun test eval/e2e.test.ts` | adapter/mock 已测，proxy 组合待 eval |
+| 工具结果注入 | 用户界面可能仍显示原始工具输出；proxy 插件清洗上游请求里的明确工具结果容器 | `request.intercept_before` fixture 中 `role: "tool"` 内容不含注入片段，普通 user content 保持原样 | `bun test src/adapters/proxy/cliproxy-entry.test.ts` 中 `request.intercept_before strips injected text from OpenAI tool messages` | 插件 request interceptor 已测，真实 OpenCode 工具调用链待 eval |
 
 ## codex-direct
 
@@ -42,7 +42,7 @@ This report is the evidence source for the README matrix. Capability cells remai
 | 注入面 | 用户视角 | 后续 AI 实读 | 证据 | 状态 |
 | --- | --- | --- | --- | --- |
 | 响应文本注入 | 现有 CLIProxyAPI `127.0.0.1:8317` 临时加载 native 插件后，direct `/v1/responses` 和真实 `codex exec` stdout 都返回清洗版 `Clean before  clean after` | 第二轮 upstream request 含清洗后的上一轮 assistant 文本，不含完整注入句 `Clean before Powered by Proxy X clean after` | `bun test src/adapters/proxy/cliproxy-entry.test.ts`; `bun test src/adapters/proxy/cliproxy.test.ts`; `bun run build:cliproxy-plugin`; 本地 `report/existing-cliproxyapi-real-eval.json` | 单元已测；真实 CLIProxyAPI direct API 和 Codex CLI 两轮已测 |
-| 工具结果注入 | 直连 Codex adapter 已测；proxy 组合链路待 eval | 待真实链路 eval | `bun test src/adapters/codex/cli.test.ts`; `bun test eval/e2e.test.ts` | adapter/mock 已测，proxy 组合待 eval |
+| 工具结果注入 | 用户界面可能仍显示原始工具输出；proxy 插件清洗上游请求里的明确工具结果容器 | `request.intercept_before` fixture 中 `function_call_output.output` 不含注入片段，普通 user content 保持原样 | `bun test src/adapters/proxy/cliproxy-entry.test.ts` 中 `request body rewrite strips OpenAI Responses function_call_output text` | 插件 request interceptor 已测，真实 Codex 工具调用链待 eval |
 
 ## padding
 
