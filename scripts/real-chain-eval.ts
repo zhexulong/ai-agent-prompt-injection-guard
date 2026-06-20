@@ -5,20 +5,23 @@ import { randomUUID } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
 import { openSync } from "node:fs";
 import { loadAipigConfig, type AipigConfig } from "../src/config";
+import { writeRuntimeConfig } from "../src/cli/aipig";
 import {
   buildCliProxyRuntimeEnv,
   cliProxyExecutableName,
   createCliProxyInstallPlan,
   patchCliProxyConfig,
 } from "../src/adapters/proxy/cliproxy-config";
+import { waitForCliProxyHotReload } from "../src/adapters/proxy/cliproxy-lifecycle";
 import { createCaptureServer } from "../eval/capture-server";
 
 function parseArgs(argv: string[]) {
-  const out: { config?: string; keepTemp?: boolean } = {};
+  const out: { config?: string; keepTemp?: boolean; restart?: boolean } = {};
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--config") out.config = argv[++i];
     else if (arg === "--keep-temp") out.keepTemp = true;
+    else if (arg === "--restart") out.restart = true;
     else throw new Error(`unknown argument: ${arg}`);
   }
   return out;
@@ -40,6 +43,18 @@ function requestSummary(capture: ReturnType<typeof createCaptureServer>, startIn
     containsCleanedAssistant: request.bodyText.includes(cleaned),
     containsNeedle: request.bodyText.includes("Powered by Proxy X"),
   }));
+}
+
+function snapshotFile(path: string): Buffer | undefined {
+  return existsSync(path) ? readFileSync(path) : undefined;
+}
+
+function restoreFileSnapshot(path: string, snapshot: Buffer | undefined): void {
+  if (snapshot === undefined) {
+    rmSync(path, { force: true });
+  } else {
+    writeFileSync(path, snapshot);
+  }
 }
 
 async function runCommand(command: string, args: string[], env: NodeJS.ProcessEnv, timeoutMs: number) {
@@ -302,17 +317,26 @@ const plan = createCliProxyInstallPlan({
 if (!existsSync(plan.pluginArtifact)) {
   throw new Error(`missing ${plan.pluginArtifact}; run bun run build:cliproxy-plugin first`);
 }
+if (!existsSync(plan.entryArtifact)) {
+  throw new Error(`missing ${plan.entryArtifact}; run bun run build first`);
+}
 
 const tempRoot = config.realChainEval.tempRoot ?? mkdtempSync(join(tmpdir(), "aipig-real-chain-"));
 const upstreamPort = freePort();
 const capture = createCaptureServer({ port: upstreamPort, responseText: config.realChainEval.injectedText });
 const originalConfig = readFileSync(plan.cpaConfig, "utf8");
 const backupPath = `${plan.cpaConfig}.aipig-real-chain-backup-${Date.now()}`;
+const runtimeConfigPath = join(plan.cpaRoot, ".opencode", "aipig.jsonc");
+const originalRuntimeConfig = existsSync(runtimeConfigPath) ? readFileSync(runtimeConfigPath, "utf8") : undefined;
+const originalPluginTarget = snapshotFile(plan.pluginTarget);
+const originalEntryTarget = snapshotFile(plan.entryTarget);
 let restored = false;
 
 try {
   mkdirSync(plan.pluginsDir, { recursive: true });
   copyFileSync(plan.pluginArtifact, plan.pluginTarget);
+  copyFileSync(plan.entryArtifact, plan.entryTarget);
+  writeRuntimeConfig(config, plan.cpaRoot, repoRoot);
   writeFileSync(backupPath, originalConfig, { mode: 0o600 });
   writeFileSync(plan.cpaConfig, patchCliProxyConfig(originalConfig, {
     cpaRoot: plan.cpaRoot,
@@ -323,8 +347,17 @@ try {
     claudeClientKey: config.realChainEval.claudeClientKey,
     openaiModel: config.realChainEval.openaiModel,
   }), { mode: 0o600 });
-  await restartCPA(plan, config);
-  await waitForCPA(config.cliproxy.port, config.realChainEval.openaiClientKey);
+  if (args.restart) {
+    await restartCPA(plan, config);
+    await waitForCPA(config.cliproxy.port, config.realChainEval.openaiClientKey);
+  } else {
+    const hotReload = await waitForCliProxyHotReload({
+      baseUrl: `http://127.0.0.1:${config.cliproxy.port}`,
+      clientKey: config.realChainEval.openaiClientKey,
+      timeoutMs: 20_000,
+    });
+    if (!hotReload.ok) throw new Error(`CPA did not hot-reload eval config: ${hotReload.lastError ?? JSON.stringify(hotReload)}`);
+  }
 
   const result: Record<string, unknown> = {
     cpaPort: config.cliproxy.port,
@@ -345,8 +378,22 @@ try {
 } finally {
   try {
     writeFileSync(plan.cpaConfig, originalConfig, { mode: 0o600 });
+    if (originalRuntimeConfig === undefined) {
+      try { rmSync(runtimeConfigPath, { force: true }); } catch {}
+    } else {
+      writeFileSync(runtimeConfigPath, originalRuntimeConfig, { mode: 0o600 });
+    }
+    restoreFileSnapshot(plan.pluginTarget, originalPluginTarget);
+    restoreFileSnapshot(plan.entryTarget, originalEntryTarget);
     restored = true;
-    await restartCPA(plan, config);
+    if (args.restart) {
+      await restartCPA(plan, config);
+    } else {
+      await waitForCliProxyHotReload({
+        baseUrl: `http://127.0.0.1:${config.cliproxy.port}`,
+        timeoutMs: 20_000,
+      });
+    }
   } finally {
     capture.stop();
     if (restored) {

@@ -34,6 +34,8 @@ export interface CliProxyInstallPlan {
   pluginsDir: string;
   pluginArtifact: string;
   pluginTarget: string;
+  entryArtifact: string;
+  entryTarget: string;
 }
 
 export function createCliProxyInstallPlan(options: CliProxyInstallPlanOptions): CliProxyInstallPlan {
@@ -47,6 +49,8 @@ export function createCliProxyInstallPlan(options: CliProxyInstallPlanOptions): 
     pluginsDir,
     pluginArtifact: join(options.repoRoot, "dist", artifactName),
     pluginTarget: join(pluginsDir, artifactName),
+    entryArtifact: join(options.repoRoot, "dist", "src", "adapters", "proxy", "cliproxy-entry.js"),
+    entryTarget: join(pluginsDir, "cliproxy-aipig-entry.js"),
   };
 }
 
@@ -103,6 +107,14 @@ export function patchCliProxyPluginConfig(
     claudeClientKey: "",
     openaiModel: "",
   });
+  return stringifyYamlConfig(config);
+}
+
+export function unpatchCliProxyPluginConfig(original: string, pluginName: string): string {
+  const config = parseYamlConfig(original);
+  if (isPlainObject(config.plugins) && isPlainObject(config.plugins.configs)) {
+    delete config.plugins.configs[pluginName];
+  }
   return stringifyYamlConfig(config);
 }
 

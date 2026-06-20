@@ -103,7 +103,7 @@ func cliproxyPluginShutdown() {}
 func runTypeScriptEntry(method string, payload []byte) ([]byte, error) {
 	entry := os.Getenv("AIPIG_CLIPROXY_ENTRY")
 	if entry == "" {
-		entry = "src/adapters/proxy/cliproxy-entry.ts"
+		entry = defaultInstalledEntry()
 	}
 	bun := resolveBunExecutable()
 
@@ -112,6 +112,8 @@ func runTypeScriptEntry(method string, payload []byte) ([]byte, error) {
 
 	cmd := exec.CommandContext(ctx, bun, entry, method)
 	if workdir := os.Getenv("AIPIG_CLIPROXY_WORKDIR"); workdir != "" {
+		cmd.Dir = workdir
+	} else if workdir := defaultCliProxyRoot(); workdir != "" {
 		cmd.Dir = workdir
 	}
 	cmd.Env = os.Environ()
@@ -129,6 +131,22 @@ func runTypeScriptEntry(method string, payload []byte) ([]byte, error) {
 		return nil, err
 	}
 	return out, nil
+}
+
+func defaultInstalledEntry() string {
+	root := defaultCliProxyRoot()
+	if root == "" {
+		return "plugins/cliproxy-aipig-entry.js"
+	}
+	return filepath.Join(root, "plugins", "cliproxy-aipig-entry.js")
+}
+
+func defaultCliProxyRoot() string {
+	exe, err := os.Executable()
+	if err != nil || exe == "" {
+		return ""
+	}
+	return filepath.Dir(exe)
 }
 
 func resolveBunExecutable() string {

@@ -7,6 +7,7 @@ import {
   createCliProxyInstallPlan,
   patchCliProxyPluginConfig,
   patchCliProxyConfig,
+  unpatchCliProxyPluginConfig,
 } from "./cliproxy-config";
 import { NotifyLevel } from "../../core/types";
 
@@ -93,6 +94,29 @@ test("patchCliProxyPluginConfig only installs the plugin section", () => {
   expect(patched).not.toContain("aipig-eval-client-key");
 });
 
+test("unpatchCliProxyPluginConfig removes only the AIPIG plugin config", () => {
+  const original = [
+    "plugins:",
+    "  enabled: true",
+    "  dir: /tmp/plugins",
+    "  configs:",
+    "    other-plugin:",
+    "      enabled: true",
+    "    cliproxy-aipig:",
+    "      enabled: true",
+    "      priority: 1",
+    "api-keys:",
+    "  - existing-key",
+  ].join("\n");
+
+  const patched = unpatchCliProxyPluginConfig(original, "cliproxy-aipig");
+  const yaml = parseYaml(patched);
+
+  expect(yaml.plugins.configs["other-plugin"].enabled).toBe(true);
+  expect(yaml.plugins.configs["cliproxy-aipig"]).toBeUndefined();
+  expect(yaml["api-keys"]).toEqual(["existing-key"]);
+});
+
 test("patchCliProxyConfig appends plugin config to an existing plugins section", () => {
   const original = [
     "api-keys:",
@@ -153,6 +177,8 @@ test("cliproxy install plan uses platform-specific binary and plugin artifact na
   expect(linux.cpaBin).toBe("/opt/cliproxyapi/cli-proxy-api");
   expect(linux.pluginArtifact).toBe("/repo/dist/cliproxy-aipig.so");
   expect(linux.pluginTarget).toBe("/opt/cliproxyapi/plugins/cliproxy-aipig.so");
+  expect(linux.entryArtifact).toBe("/repo/dist/src/adapters/proxy/cliproxy-entry.js");
+  expect(linux.entryTarget).toBe("/opt/cliproxyapi/plugins/cliproxy-aipig-entry.js");
 
   const windows = createCliProxyInstallPlan({
     cpaRoot: "C:\\cliproxyapi",
@@ -163,6 +189,8 @@ test("cliproxy install plan uses platform-specific binary and plugin artifact na
   expect(windows.cpaBin).toBe("C:\\cliproxyapi/cli-proxy-api.exe");
   expect(windows.pluginArtifact).toBe("C:\\repo/dist/cliproxy-aipig.dll");
   expect(windows.pluginTarget).toBe("C:\\cliproxyapi/plugins/cliproxy-aipig.dll");
+  expect(windows.entryArtifact).toBe("C:\\repo/dist/src/adapters/proxy/cliproxy-entry.js");
+  expect(windows.entryTarget).toBe("C:\\cliproxyapi/plugins/cliproxy-aipig-entry.js");
 });
 
 test("platform helpers expose CPA executable and plugin names", () => {

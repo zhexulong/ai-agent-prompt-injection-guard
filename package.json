@@ -6,8 +6,9 @@
   "scripts": {
     "build": "bun build eval/history-replay.ts eval/capture-server.ts src/adapters/proxy/cliproxy.ts src/adapters/proxy/cliproxy-entry.ts src/adapters/codex/cli.ts src/adapters/claude/cli.ts src/adapters/opencode/plugin.ts --outdir dist --target bun --format esm",
     "build:cliproxy-plugin": "bun run scripts/build-cliproxy-plugin.ts",
-    "cliproxy:doctor": "bun run scripts/aipig-cliproxy.ts doctor",
-    "cliproxy:install": "bun run scripts/aipig-cliproxy.ts install",
+    "aipig": "bun run scripts/aipig.ts",
+    "cliproxy:doctor": "bun run scripts/aipig.ts cliproxy doctor",
+    "cliproxy:install": "bun run scripts/aipig.ts cliproxy install",
     "eval:real-chain": "bun run scripts/real-chain-eval.ts",
     "test": "bun test",
     "verify": "bun test && bun run build"

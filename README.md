@@ -21,19 +21,17 @@ Prerequisites:
 - Go toolchain, for building the native CLIProxyAPI plugin bridge
 - CLIProxyAPI v7 with plugin support
 
-Install dependencies and build:
+Install dependencies and build the plugin:
 
 ```bash
 npm install
-bun run build
-bun run build:cliproxy-plugin
+bun run aipig -- build-plugin
 ```
 
 Create a config file:
 
 ```bash
-mkdir -p .opencode
-cp examples/aipig.config.example.jsonc .opencode/aipig.jsonc
+bun run aipig -- init --config .opencode/aipig.jsonc
 ```
 
 Edit `.opencode/aipig.jsonc` and set:
@@ -51,17 +49,24 @@ Edit `.opencode/aipig.jsonc` and set:
 Check the install plan:
 
 ```bash
-bun run cliproxy:doctor -- --config .opencode/aipig.jsonc
-bun run cliproxy:install -- --config .opencode/aipig.jsonc
+bun run aipig -- cliproxy doctor --config .opencode/aipig.jsonc
+bun run aipig -- cliproxy diff --config .opencode/aipig.jsonc
 ```
 
-`cliproxy:install` is dry-run by default. To copy the plugin and update CLIProxyAPI `config.yaml`:
+Install:
 
 ```bash
-bun run cliproxy:install -- --config .opencode/aipig.jsonc --write
+bun run aipig -- cliproxy install --config .opencode/aipig.jsonc --write
 ```
 
-Restart CLIProxyAPI after installing.
+Install copies the native plugin and bundled JS entry into CLIProxyAPI `plugins/`, writes a runtime `.opencode/aipig.jsonc` under the CLIProxyAPI directory, patches `config.yaml`, and waits for CLIProxyAPI hot reload. It does not restart CPA by default.
+
+Rollback commands:
+
+```bash
+bun run aipig -- cliproxy uninstall --config .opencode/aipig.jsonc --write
+bun run aipig -- cliproxy restore --config .opencode/aipig.jsonc --backup /path/to/config.yaml.aipig-backup-... --write
+```
 
 ## Config Files
 
@@ -114,11 +119,17 @@ Usage-only token padding is not rewritten. It is logged and surfaced as an alert
 
 ## Real Chain Eval
 
-The real-chain eval temporarily adds local eval keys/upstreams to CLIProxyAPI, restarts CPA, runs two turns per enabled host, writes a local report, then restores the original CPA config and restarts CPA again.
+The real-chain eval temporarily adds local eval keys/upstreams to CLIProxyAPI, waits for hot reload, runs two turns per enabled host, writes a local report, restores the original CPA config, and waits for hot reload again.
 
 ```bash
-bun run build:cliproxy-plugin
+bun run aipig -- build-plugin
 bun run eval:real-chain -- --config .opencode/aipig.jsonc
+```
+
+Use `--restart` only if hot reload is unavailable in your CPA build:
+
+```bash
+bun run eval:real-chain -- --config .opencode/aipig.jsonc --restart
 ```
 
 The report path defaults to `report/real-chain-eval.json`. `report/` is local evidence and should not be committed.
@@ -150,18 +161,12 @@ Trusted system-prompt containers such as Codex `session_meta.base_instructions` 
 
 ## Development
 
-Run the standard checks:
+Run checks:
 
 ```bash
-bun test
-bun run build
-bun run build:cliproxy-plugin
-```
-
-Run everything used by `verify`:
-
-```bash
+./node_modules/.bin/tsc --noEmit
 bun run verify
+bun run build:cliproxy-plugin
 ```
 
 `verify` runs unit/integration tests and the Bun build. It does not run the real-chain eval or native plugin build.
